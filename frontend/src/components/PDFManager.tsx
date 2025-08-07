@@ -1,0 +1,483 @@
+import React, { useState, useRef, useEffect } from 'react';
+
+const PDFManager: React.FC = () => {
+  const [pdfs, setPdfs] = useState<any[]>([]);
+  const [selectedPDF, setSelectedPDF] = useState<any>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [annotationMode, setAnnotationMode] = useState<'none' | 'highlight' | 'textbox' | 'draw'>('none');
+  const [annotations, setAnnotations] = useState<any[]>([]);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || file.type !== 'application/pdf') {
+      alert('Please select a valid PDF file');
+      return;
+    }
+
+    setIsUploading(true);
+    
+    try {
+      // In a real app, you would upload to your server/S3
+      const fileUrl = URL.createObjectURL(file);
+      
+      const newPDF = {
+        id: Date.now().toString(),
+        title: file.name.replace('.pdf', ''),
+        filename: file.name,
+        fileUrl: fileUrl,
+        annotations: [],
+        createdAt: new Date().toISOString(),
+      };
+      
+      setPdfs(prev => [newPDF, ...prev]);
+      alert('PDF uploaded successfully!');
+    } catch (error) {
+      console.error('Upload failed:', error);
+      alert('Failed to upload PDF');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleSelectPDF = (pdf: any) => {
+    setSelectedPDF(pdf);
+  };
+
+  const handleViewPDF = (pdf: any) => {
+    // Open PDF in new tab for better viewing
+    const newWindow = window.open(pdf.fileUrl, '_blank');
+    if (!newWindow) {
+      alert('Please allow popups for this site to view PDFs');
+    }
+  };
+
+  const handleDeletePDF = (id: string) => {
+    if (window.confirm('Are you sure you want to delete this PDF?')) {
+      setPdfs(prev => prev.filter(pdf => pdf.id !== id));
+      if (selectedPDF?.id === id) {
+        setSelectedPDF(null);
+      }
+    }
+  };
+
+  const handleDownload = (pdf: any) => {
+    // Create a download link
+    const link = document.createElement('a');
+    link.href = pdf.fileUrl;
+    link.download = pdf.filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Annotation handlers
+  const handleHighlight = () => {
+    setAnnotationMode(annotationMode === 'highlight' ? 'none' : 'highlight');
+  };
+
+  const handleTextBox = () => {
+    setAnnotationMode(annotationMode === 'textbox' ? 'none' : 'textbox');
+    if (annotationMode !== 'textbox') {
+      const text = prompt('Enter text for annotation:');
+      if (text) {
+        const newAnnotation = {
+          id: Date.now().toString(),
+          type: 'text',
+          content: text,
+          page: 1,
+          timestamp: new Date().toISOString()
+        };
+        setAnnotations(prev => [...prev, newAnnotation]);
+      }
+    }
+  };
+
+  const handleDraw = () => {
+    setAnnotationMode(annotationMode === 'draw' ? 'none' : 'draw');
+  };
+
+  const handleSaveAnnotations = () => {
+    if (!selectedPDF) return;
+    
+    // Update the selected PDF with annotations
+    const updatedPDF = {
+      ...selectedPDF,
+      annotations: annotations
+    };
+    
+    // Update the PDFs list
+    setPdfs(prev => prev.map(pdf => 
+      pdf.id === selectedPDF.id ? updatedPDF : pdf
+    ));
+    
+    setSelectedPDF(updatedPDF);
+    alert(`Saved ${annotations.length} annotation(s) successfully!`);
+  };
+
+  const handleDeleteAnnotation = (id: string) => {
+    setAnnotations(prev => prev.filter(ann => ann.id !== id));
+  };
+
+  // Canvas drawing handlers
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (annotationMode !== 'draw') return;
+    setIsDrawing(true);
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    }
+  };
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDrawing || annotationMode !== 'draw') return;
+    
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      ctx.lineTo(x, y);
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  };
+
+  const stopDrawing = () => {
+    if (isDrawing && annotationMode === 'draw') {
+      setIsDrawing(false);
+      const newAnnotation = {
+        id: Date.now().toString(),
+        type: 'drawing',
+        content: 'Hand drawn annotation',
+        page: 1,
+        timestamp: new Date().toISOString()
+      };
+      setAnnotations(prev => [...prev, newAnnotation]);
+    }
+  };
+
+  // Handle click on PDF for highlight/textbox modes
+  const handlePDFClick = (e: React.MouseEvent) => {
+    if (annotationMode === 'highlight') {
+      const newAnnotation = {
+        id: Date.now().toString(),
+        type: 'highlight',
+        content: 'Highlighted text area',
+        page: 1,
+        timestamp: new Date().toISOString()
+      };
+      setAnnotations(prev => [...prev, newAnnotation]);
+    } else if (annotationMode === 'textbox') {
+      const text = prompt('Enter text for annotation:');
+      if (text) {
+        const newAnnotation = {
+          id: Date.now().toString(),
+          type: 'text',
+          content: text,
+          page: 1,
+          timestamp: new Date().toISOString()
+        };
+        setAnnotations(prev => [...prev, newAnnotation]);
+      }
+    }
+  };
+
+  // Load annotations when PDF is selected
+  useEffect(() => {
+    if (selectedPDF && selectedPDF.annotations) {
+      setAnnotations(selectedPDF.annotations);
+    } else {
+      setAnnotations([]);
+    }
+  }, [selectedPDF]);
+
+  return (
+    <div className="h-full flex">
+      {/* PDF List */}
+      <div className="w-1/3 bg-white border-r border-gray-200 flex flex-col">
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="text-lg font-medium text-gray-900">PDF Files</h3>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+            >
+              {isUploading ? 'Uploading...' : '+ Upload PDF'}
+            </button>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf"
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {pdfs.length === 0 ? (
+            <div className="p-4 text-center text-gray-500">
+              <svg className="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p>No PDF files uploaded</p>
+            </div>
+          ) : (
+            pdfs.map((pdf) => (
+              <div
+                key={pdf.id}
+                className={`p-4 border-b border-gray-100 cursor-pointer hover:bg-gray-50 ${
+                  selectedPDF?.id === pdf.id ? 'bg-blue-50' : ''
+                }`}
+                onClick={() => handleSelectPDF(pdf)}
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <h4 className="font-medium text-gray-900 truncate">{pdf.title}</h4>
+                  <div className="flex space-x-1">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewPDF(pdf);
+                      }}
+                      className="text-blue-600 hover:text-blue-800 text-xs"
+                    >
+                      View
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDownload(pdf);
+                      }}
+                      className="text-green-600 hover:text-green-800 text-xs"
+                    >
+                      Download
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeletePDF(pdf.id);
+                      }}
+                      className="text-red-600 hover:text-red-800 text-xs"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600 mb-2">{pdf.filename}</p>
+                <p className="text-xs text-gray-500">
+                  Uploaded: {new Date(pdf.createdAt).toLocaleDateString()}
+                </p>
+                {pdf.annotations && pdf.annotations.length > 0 && (
+                  <div className="text-xs text-blue-600 font-medium mt-1">
+                    {pdf.annotations.length} annotation(s)
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* PDF Viewer */}
+      <div className="flex-1 bg-white flex flex-col">
+        {selectedPDF ? (
+          <div className="flex flex-col h-full">
+            {/* PDF Toolbar */}
+            <div className="bg-gray-50 border-b border-gray-200 p-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h2 className="text-lg font-medium text-gray-900">{selectedPDF.title}</h2>
+                  <p className="text-sm text-gray-600">{selectedPDF.filename}</p>
+                </div>
+                <div className="flex space-x-2">
+                  <button 
+                    onClick={handleHighlight}
+                    className={`px-3 py-1 rounded-md text-sm transition-colors ${
+                      annotationMode === 'highlight' 
+                        ? 'bg-yellow-600 text-white' 
+                        : 'bg-yellow-500 text-white hover:bg-yellow-600'
+                    }`}
+                  >
+                    {annotationMode === 'highlight' ? '📝 Highlighting' : 'Highlight'}
+                  </button>
+                  <button 
+                    onClick={handleTextBox}
+                    className={`px-3 py-1 rounded-md text-sm transition-colors ${
+                      annotationMode === 'textbox' 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-blue-500 text-white hover:bg-blue-600'
+                    }`}
+                  >
+                    Text Box
+                  </button>
+                  <button 
+                    onClick={handleDraw}
+                    className={`px-3 py-1 rounded-md text-sm transition-colors ${
+                      annotationMode === 'draw' 
+                        ? 'bg-green-600 text-white' 
+                        : 'bg-green-500 text-white hover:bg-green-600'
+                    }`}
+                  >
+                    {annotationMode === 'draw' ? '✏️ Drawing' : 'Draw'}
+                  </button>
+                  <button 
+                    onClick={handleSaveAnnotations}
+                    className="bg-purple-500 text-white px-3 py-1 rounded-md text-sm hover:bg-purple-600 transition-colors"
+                  >
+                    💾 Save ({annotations.length})
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* PDF Viewer Area */}
+            <div className="flex-1 overflow-auto bg-gray-100 p-4">
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 min-h-full">
+                {/* Try to embed PDF, fallback to manual open */}
+                <div className="h-full flex flex-col relative">
+                  <div className="flex-1 min-h-96 relative">
+                    <div 
+                      onClick={handlePDFClick}
+                      className={`w-full h-full ${
+                        annotationMode === 'highlight' ? 'cursor-text' :
+                        annotationMode === 'textbox' ? 'cursor-pointer' :
+                        'cursor-default'
+                      }`}
+                    >
+                      <iframe
+                        src={selectedPDF.fileUrl}
+                        width="100%"
+                        height="100%"
+                        style={{ minHeight: '500px', pointerEvents: annotationMode !== 'none' ? 'none' : 'auto' }}
+                        title={selectedPDF.title}
+                        onError={() => {
+                          console.log('PDF iframe failed, using fallback');
+                        }}
+                      />
+                    </div>
+                    
+                    {/* Drawing Canvas Overlay */}
+                    {annotationMode === 'draw' && (
+                      <canvas
+                        ref={canvasRef}
+                        width={800}
+                        height={500}
+                        className="absolute top-0 left-0 cursor-crosshair"
+                        style={{ 
+                          width: '100%', 
+                          height: '100%',
+                          zIndex: 10,
+                          pointerEvents: annotationMode === 'draw' ? 'auto' : 'none'
+                        }}
+                        onMouseDown={startDrawing}
+                        onMouseMove={draw}
+                        onMouseUp={stopDrawing}
+                        onMouseLeave={stopDrawing}
+                      />
+                    )}
+                    
+                    {/* Annotation Mode Indicator */}
+                    {annotationMode !== 'none' && (
+                      <div className="absolute top-4 left-4 bg-black bg-opacity-75 text-white px-3 py-1 rounded-md text-sm z-20">
+                        {annotationMode === 'highlight' && '📝 Click and drag to highlight'}
+                        {annotationMode === 'textbox' && '📝 Click to add text annotation'}
+                        {annotationMode === 'draw' && '✏️ Click and drag to draw'}
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-4 border-t border-gray-200 text-center">
+                    <p className="text-sm text-gray-600 mb-2">
+                      Can't see the PDF? Try opening it in a new tab.
+                    </p>
+                    <button
+                      onClick={() => handleViewPDF(selectedPDF)}
+                      className="bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-primary-700"
+                    >
+                      Open PDF in New Tab
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Annotations Panel */}
+            <div className="bg-gray-50 border-t border-gray-200 p-4">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-sm font-medium text-gray-900">Annotations ({annotations.length})</h3>
+                {annotations.length > 0 && (
+                  <button
+                    onClick={() => setAnnotations([])}
+                    className="text-red-600 hover:text-red-800 text-xs"
+                  >
+                    Clear All
+                  </button>
+                )}
+              </div>
+              <div className="max-h-32 overflow-y-auto">
+                {annotations.length > 0 ? (
+                  annotations.map((annotation: any) => (
+                    <div key={annotation.id} className="bg-white p-2 rounded-md mb-2 text-sm">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <span className="font-medium capitalize">{annotation.type}</span>
+                          <span className="text-xs text-gray-500 ml-2">
+                            {new Date(annotation.timestamp).toLocaleTimeString()}
+                          </span>
+                        </div>
+                        <button
+                          onClick={() => handleDeleteAnnotation(annotation.id)}
+                          className="text-red-500 hover:text-red-700 text-xs ml-2"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      {annotation.content && (
+                        <p className="text-gray-600 mt-1">{annotation.content}</p>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-gray-500 text-sm">
+                    No annotations yet. Use the tools above to add highlights, text, or drawings.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-gray-500">
+            <div className="text-center">
+              <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              <p className="text-lg">Select a PDF to view and annotate</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default PDFManager;

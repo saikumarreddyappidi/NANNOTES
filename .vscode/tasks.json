@@ -1,0 +1,76 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Install Dependencies",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-Command",
+				"Write-Host 'Installing frontend dependencies...'; cd frontend; npm install; Write-Host 'Installing backend dependencies...'; cd ../backend; npm install; Write-Host 'Dependencies installed successfully!'"
+			],
+			"group": "build",
+			"problemMatcher": [],
+			"isBackground": false
+		},
+		{
+			"label": "Start Frontend",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-Command",
+				"cd frontend; npm start"
+			],
+			"group": "build",
+			"problemMatcher": [],
+			"isBackground": true
+		},
+		{
+			"label": "Start Backend",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-Command",
+				"cd backend; npm run dev"
+			],
+			"group": "build",
+			"problemMatcher": [],
+			"isBackground": true
+		},
+		{
+			"label": "Build Frontend",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-Command",
+				"cd frontend; npm run build"
+			],
+			"group": "build",
+			"problemMatcher": [],
+			"isBackground": false
+		},
+		{
+			"label": "Build Backend",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-Command",
+				"cd backend; npm run build"
+			],
+			"group": "build",
+			"problemMatcher": [],
+			"isBackground": false
+		},
+		{
+			"label": "Start Full Stack",
+			"dependsOrder": "parallel",
+			"dependsOn": [
+				"Start Backend",
+				"Start Frontend"
+			],
+			"group": "build",
+			"problemMatcher": [],
+			"isBackground": true
+		}
+	]
+}
