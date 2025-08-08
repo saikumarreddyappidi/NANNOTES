@@ -14,8 +14,13 @@ const PORT = process.env.PORT || 5000;
 app.use(helmet());
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://yourdomain.com'] 
-    : ['http://localhost:3000'],
+    ? [
+        'https://nannotes-frontend.up.railway.app',
+        'https://your-custom-domain.com',
+        /^https:\/\/.*\.railway\.app$/,
+        /^https:\/\/.*\.vercel\.app$/
+      ]
+    : ['http://localhost:3000', 'http://localhost:3001'],
   credentials: true
 }));
 

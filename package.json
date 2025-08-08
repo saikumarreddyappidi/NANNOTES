@@ -1,0 +1,31 @@
+{
+  "name": "nannotes-fullstack",
+  "version": "1.0.0",
+  "description": "NANNOTES Educational Productivity Platform - Full Stack Application",
+  "scripts": {
+    "build": "cd backend && npm install && npm run build",
+    "start": "cd backend && npm start",
+    "install-frontend": "cd frontend && npm install",
+    "build-frontend": "cd frontend && npm install && npm run build",
+    "dev": "concurrently \"cd backend && npm run dev-simple\" \"cd frontend && npm start\"",
+    "postinstall": "npm run install-frontend && npm run build"
+  },
+  "keywords": [
+    "education",
+    "productivity",
+    "notes",
+    "pdf",
+    "react",
+    "nodejs",
+    "typescript"
+  ],
+  "author": "saikumarreddyappidi",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}

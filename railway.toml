@@ -1,0 +1,14 @@
+# Railway Service Configuration
+# This file helps Railway understand your project structure
+
+# Backend Service
+[backend]
+root = "backend"
+build = "npm install && npm run build"
+start = "npm start"
+
+# Frontend Service (if deploying separately)
+[frontend]
+root = "frontend"
+build = "npm install && npm run build"
+start = "npm run serve"
