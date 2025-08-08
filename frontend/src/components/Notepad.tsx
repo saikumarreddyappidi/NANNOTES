@@ -7,11 +7,12 @@ import { RootState, AppDispatch } from '../store';
 
 const Notepad: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { notes, isLoading, searchQuery } = useSelector((state: RootState) => state.notes);
+  const { notes, isLoading } = useSelector((state: RootState) => state.notes);
   const { user } = useSelector((state: RootState) => state.auth);
 
   const [selectedNote, setSelectedNote] = useState<any>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -57,8 +58,10 @@ const Notepad: React.FC = () => {
     try {
       if (selectedNote) {
         await dispatch(updateNote({ id: selectedNote._id, ...noteData })).unwrap();
+        alert('Note updated successfully!');
       } else {
         await dispatch(createNote(noteData)).unwrap();
+        alert('Note created successfully!');
       }
       
       // Reset form and close editor
@@ -71,22 +74,26 @@ const Notepad: React.FC = () => {
       
       // Refresh notes list
       await dispatch(fetchNotes()).unwrap();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to save note:', error);
-      alert('Failed to save note. Please try again.');
+      const errorMessage = error?.message || error?.toString() || 'Failed to save note. Please try again.';
+      alert(errorMessage);
     }
   };
 
   const handleDeleteNote = async (noteId: string) => {
     if (window.confirm('Are you sure you want to delete this note?')) {
       try {
-        await dispatch(deleteNote(noteId));
+        await dispatch(deleteNote(noteId)).unwrap();
         if (selectedNote?._id === noteId) {
           setSelectedNote(null);
           setIsEditing(false);
         }
-      } catch (error) {
+        alert('Note deleted successfully!');
+      } catch (error: any) {
         console.error('Failed to delete note:', error);
+        const errorMessage = error?.message || error?.toString() || 'Failed to delete note. Please try again.';
+        alert(errorMessage);
       }
     }
   };
@@ -120,10 +127,14 @@ const Notepad: React.FC = () => {
     ],
   };
 
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen);
+  };
+
   return (
-    <div className="h-full flex">
+    <div className={`h-full flex ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}>
       {/* Notes List */}
-      <div className="w-1/3 bg-white border-r border-gray-200 flex flex-col">
+      <div className={`${isFullscreen ? 'hidden' : 'w-1/3'} bg-white border-r border-gray-200 flex flex-col`}>
         <div className="p-4 border-b border-gray-200">
           <div className="flex space-x-2 mb-4">
             <input
@@ -151,7 +162,7 @@ const Notepad: React.FC = () => {
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
             <div className="p-4 text-center text-gray-500">Loading notes...</div>
-          ) : notes.length === 0 ? (
+          ) : !Array.isArray(notes) || notes.length === 0 ? (
             <div className="p-4 text-center text-gray-500">No notes found</div>
           ) : (
             notes.map((note) => (
@@ -223,6 +234,12 @@ const Notepad: React.FC = () => {
                   {selectedNote ? 'Edit Note' : 'Create New Note'}
                 </h2>
                 <div className="flex space-x-2">
+                  <button
+                    onClick={toggleFullscreen}
+                    className="bg-purple-500 text-white px-3 py-1 rounded-md text-sm hover:bg-purple-600"
+                  >
+                    {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                  </button>
                   <button
                     onClick={() => setIsEditing(false)}
                     className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-400"
@@ -298,13 +315,16 @@ const Notepad: React.FC = () => {
               )}
             </div>
 
-            <div className="flex-1 p-4">
+            <div className={`flex-1 p-4 ${isFullscreen ? 'h-screen overflow-hidden' : ''}`}>
               <ReactQuill
                 theme="snow"
                 value={content}
                 onChange={setContent}
                 modules={quillModules}
-                style={{ height: '400px' }}
+                style={{ 
+                  height: isFullscreen ? 'calc(100vh - 300px)' : '400px',
+                  overflow: 'hidden'
+                }}
               />
             </div>
           </div>
@@ -318,12 +338,20 @@ const Notepad: React.FC = () => {
                     By: {selectedNote.authorName} | {new Date(selectedNote.createdAt).toLocaleDateString()}
                   </p>
                 </div>
-                <button
-                  onClick={() => handleEditNote(selectedNote)}
-                  className="bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-primary-700"
-                >
-                  Edit
-                </button>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={toggleFullscreen}
+                    className="bg-purple-500 text-white px-3 py-1 rounded-md text-sm hover:bg-purple-600"
+                  >
+                    {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                  </button>
+                  <button
+                    onClick={() => handleEditNote(selectedNote)}
+                    className="bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-primary-700"
+                  >
+                    Edit
+                  </button>
+                </div>
               </div>
               <div className="flex flex-wrap gap-1 mt-4">
                 {selectedNote.tags?.map((tag: string) => (
@@ -336,9 +364,13 @@ const Notepad: React.FC = () => {
                 ))}
               </div>
             </div>
-            <div className="flex-1 p-4 overflow-y-auto">
+            <div className={`flex-1 p-4 overflow-y-auto ${isFullscreen ? 'h-screen' : ''}`}>
               <div
                 className="prose max-w-none"
+                style={{
+                  height: isFullscreen ? 'calc(100vh - 200px)' : 'auto',
+                  overflow: isFullscreen ? 'auto' : 'visible'
+                }}
                 dangerouslySetInnerHTML={{ __html: selectedNote.content }}
               />
             </div>

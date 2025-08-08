@@ -30,6 +30,14 @@ router.post('/register', [
       return res.status(400).json({ message: 'User already exists with this registration number' });
     }
 
+    // For staff, check if teacher code is already taken
+    if (role === 'staff' && teacherCode) {
+      const existingTeacher = await User.findOne({ teacherCode, role: 'staff' });
+      if (existingTeacher) {
+        return res.status(400).json({ message: 'Teacher code already exists. Please choose a different code.' });
+      }
+    }
+
     // Create user data
     const userData: any = {
       registrationNumber,
@@ -51,6 +59,9 @@ router.post('/register', [
       }
     } else if (role === 'staff') {
       userData.subject = subject;
+      if (teacherCode) {
+        userData.teacherCode = teacherCode;
+      }
     }
 
     const user = new User(userData);
@@ -159,6 +170,45 @@ router.get('/me', auth, async (req: any, res: any) => {
   } catch (error: any) {
     console.error('Get user error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Connect student to teacher
+router.post('/connect-teacher', auth, async (req: any, res: any) => {
+  try {
+    const { teacherCode } = req.body;
+    const studentId = req.user.userId;
+
+    if (!teacherCode) {
+      return res.status(400).json({ error: 'Teacher code is required' });
+    }
+
+    // Find the teacher with this code
+    const teacher = await User.findOne({ teacherCode, role: 'staff' });
+    if (!teacher) {
+      return res.status(404).json({ error: 'Teacher code not found. Please check and try again.' });
+    }
+
+    // Update student with teacher code
+    const student = await User.findByIdAndUpdate(
+      studentId,
+      { teacherCode },
+      { new: true }
+    ).select('-password');
+
+    if (!student) {
+      return res.status(404).json({ error: 'Student not found' });
+    }
+
+    res.json({
+      message: 'Successfully connected to teacher',
+      teacherName: teacher.registrationNumber,
+      teacherSubject: teacher.subject,
+      teacherCode: teacher.teacherCode
+    });
+  } catch (error: any) {
+    console.error('Connect teacher error:', error);
+    res.status(500).json({ error: 'Server error while connecting to teacher' });
   }
 });
 

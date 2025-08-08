@@ -84,17 +84,11 @@ app.post('/api/auth/register', (req, res) => {
       course: role === 'student' ? course : undefined,
       subject: role === 'staff' ? subject : undefined,
       teacherCode: role === 'staff' ? (teacherCode || `TC${Math.random().toString(36).substr(2, 8).toUpperCase()}`) : undefined,
-      connectedTeachers: role === 'student' ? [] : undefined,
+      connectedTeachers: role === 'student' ? [] : undefined, // Start with empty array for students
       createdAt: new Date().toISOString()
     };
     
-    // If student provided a teacher code, connect them automatically
-    if (role === 'student' && teacherCode && teacherCode.trim()) {
-      const teacher = users.find(u => u.role === 'staff' && u.teacherCode === teacherCode.trim());
-      if (teacher) {
-        (newUser as any).connectedTeachers = [teacherCode.trim()];
-      }
-    }
+    // Note: Students must manually connect to teachers using teacher codes after registration
     
     users.push(newUser);
     
@@ -229,6 +223,14 @@ app.get('/api/auth/me', (req, res) => {
 const notes: any[] = [];
 let noteIdCounter = 1;
 
+// In-memory whiteboards storage for demo
+const whiteboards: any[] = [];
+let whiteboardIdCounter = 1;
+
+// In-memory files storage for demo
+const files: any[] = [];
+let fileIdCounter = 1;
+
 // Helper function to get user from token
 const getUserFromToken = (authHeader: string) => {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -260,7 +262,7 @@ app.get('/api/notes', (req, res) => {
       // Get student's own notes
       userNotes = notes.filter(note => note.author === user._id);
       
-      // Get shared notes from connected teachers
+      // Only get shared notes from connected teachers if student has actively connected to teachers
       if (user.connectedTeachers && user.connectedTeachers.length > 0) {
         const connectedTeacherIds = users
           .filter(u => u.role === 'staff' && user.connectedTeachers.includes(u.teacherCode))
@@ -368,6 +370,212 @@ app.delete('/api/notes/:id', (req, res) => {
     res.json({ message: 'Note deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete note', details: error });
+  }
+});
+
+// Whiteboard endpoints
+app.get('/api/whiteboards', (req, res) => {
+  try {
+    const user = getUserFromToken(req.headers.authorization || '');
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    let userWhiteboards = [];
+    
+    if (user.role === 'student') {
+      // Get student's own whiteboards
+      userWhiteboards = whiteboards.filter(wb => wb.author === user._id);
+      
+      // Get shared whiteboards from connected teachers
+      if (user.connectedTeachers && user.connectedTeachers.length > 0) {
+        const connectedTeacherIds = users
+          .filter(u => u.role === 'staff' && user.connectedTeachers.includes(u.teacherCode))
+          .map(u => u._id);
+        
+        const sharedWhiteboards = whiteboards.filter(wb => 
+          connectedTeacherIds.includes(wb.author) && wb.isShared
+        );
+        
+        userWhiteboards = [...userWhiteboards, ...sharedWhiteboards];
+      }
+    } else {
+      // For staff, get their own whiteboards
+      userWhiteboards = whiteboards.filter(wb => wb.author === user._id);
+    }
+    
+    res.json(userWhiteboards);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch whiteboards', details: error });
+  }
+});
+
+app.post('/api/whiteboards', (req, res) => {
+  try {
+    const user = getUserFromToken(req.headers.authorization || '');
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const { title, imageData, isShared } = req.body;
+    
+    const newWhiteboard = {
+      id: whiteboardIdCounter++,
+      title,
+      imageData,
+      author: user._id,
+      authorName: user.registrationNumber,
+      isShared: user.role === 'staff' ? (isShared || false) : false,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    whiteboards.push(newWhiteboard);
+    
+    res.status(201).json(newWhiteboard);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to save whiteboard', details: error });
+  }
+});
+
+app.delete('/api/whiteboards/:id', (req, res) => {
+  try {
+    const user = getUserFromToken(req.headers.authorization || '');
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const whiteboardId = parseInt(req.params.id);
+    const whiteboardIndex = whiteboards.findIndex(wb => wb.id === whiteboardId && wb.author === user._id);
+    
+    if (whiteboardIndex === -1) {
+      return res.status(404).json({ error: 'Whiteboard not found or access denied' });
+    }
+    
+    whiteboards.splice(whiteboardIndex, 1);
+    
+    res.json({ message: 'Whiteboard deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete whiteboard', details: error });
+  }
+});
+
+// Files/PDF endpoints
+app.get('/api/files', (req, res) => {
+  try {
+    const user = getUserFromToken(req.headers.authorization || '');
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    let userFiles = [];
+    
+    if (user.role === 'student') {
+      // Get student's own files
+      userFiles = files.filter(file => file.author === user._id);
+      
+      // Get shared files from connected teachers
+      if (user.connectedTeachers && user.connectedTeachers.length > 0) {
+        const connectedTeacherIds = users
+          .filter(u => u.role === 'staff' && user.connectedTeachers.includes(u.teacherCode))
+          .map(u => u._id);
+        
+        const sharedFiles = files.filter(file => 
+          connectedTeacherIds.includes(file.author) && file.isShared
+        );
+        
+        userFiles = [...userFiles, ...sharedFiles];
+      }
+    } else {
+      // For staff, get their own files
+      userFiles = files.filter(file => file.author === user._id);
+    }
+    
+    res.json(userFiles);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch files', details: error });
+  }
+});
+
+app.post('/api/files/upload', (req, res) => {
+  try {
+    const user = getUserFromToken(req.headers.authorization || '');
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const { filename, fileData, isShared } = req.body;
+    
+    const newFile = {
+      id: fileIdCounter++,
+      title: filename.replace('.pdf', ''),
+      filename: filename,
+      fileData: fileData,
+      fileUrl: fileData, // Use base64 data as URL for demo
+      author: user._id,
+      authorName: user.registrationNumber,
+      isShared: user.role === 'staff' ? (isShared || false) : false,
+      annotations: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    files.push(newFile);
+    
+    res.status(201).json(newFile);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to upload file', details: error });
+  }
+});
+
+app.put('/api/files/:id', (req, res) => {
+  try {
+    const user = getUserFromToken(req.headers.authorization || '');
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const fileId = parseInt(req.params.id);
+    const fileIndex = files.findIndex(file => file.id === fileId && file.author === user._id);
+    
+    if (fileIndex === -1) {
+      return res.status(404).json({ error: 'File not found or access denied' });
+    }
+    
+    const { annotations, isShared } = req.body;
+    
+    files[fileIndex] = {
+      ...files[fileIndex],
+      annotations: annotations || files[fileIndex].annotations,
+      isShared: user.role === 'staff' ? (isShared !== undefined ? isShared : files[fileIndex].isShared) : files[fileIndex].isShared,
+      updatedAt: new Date().toISOString()
+    };
+    
+    res.json(files[fileIndex]);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update file', details: error });
+  }
+});
+
+app.delete('/api/files/:id', (req, res) => {
+  try {
+    const user = getUserFromToken(req.headers.authorization || '');
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const fileId = parseInt(req.params.id);
+    const fileIndex = files.findIndex(file => file.id === fileId && file.author === user._id);
+    
+    if (fileIndex === -1) {
+      return res.status(404).json({ error: 'File not found or access denied' });
+    }
+    
+    files.splice(fileIndex, 1);
+    
+    res.json({ message: 'File deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete file', details: error });
   }
 });
 

@@ -9,20 +9,29 @@ const router = express.Router();
 // Get all notes (user's notes + shared notes from teachers)
 router.get('/', auth, async (req: any, res: any) => {
   try {
-    const user = await User.findById(req.user.userId);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    let query: any = {
-      $or: [
-        { authorId: req.user.userId }, // User's own notes
-      ]
-    };
+    let query: any;
 
-    // If user has a teacher code, include shared notes from that teacher
-    if (user.teacherCode) {
-      query.$or.push({ teacherCode: user.teacherCode, isShared: true });
+    if (user.role === 'staff') {
+      // Staff sees only their own notes
+      query = { authorId: req.user.id };
+    } else {
+      // Students see their own notes + shared notes from connected teachers
+      const userTeacherCodes = user.teacherCodes || [];
+      
+      query = {
+        $or: [
+          { authorId: req.user.id }, // User's own notes
+          { 
+            isShared: true,
+            teacherCode: { $in: userTeacherCodes }
+          }
+        ]
+      };
     }
 
     const notes = await Note.find(query).sort({ updatedAt: -1 });
@@ -37,20 +46,29 @@ router.get('/', auth, async (req: any, res: any) => {
 router.get('/search', auth, async (req: any, res: any) => {
   try {
     const { q, tags } = req.query;
-    const user = await User.findById(req.user.userId);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    let query: any = {
-      $or: [
-        { authorId: req.user.userId },
-      ]
-    };
+    let query: any;
 
-    // Include shared notes if user has teacher code
-    if (user.teacherCode) {
-      query.$or.push({ teacherCode: user.teacherCode, isShared: true });
+    if (user.role === 'staff') {
+      // Staff sees only their own notes
+      query = { authorId: req.user.id };
+    } else {
+      // Students see their own notes + shared notes from connected teachers
+      const userTeacherCodes = user.teacherCodes || [];
+      
+      query = {
+        $or: [
+          { authorId: req.user.id }, // User's own notes
+          { 
+            isShared: true,
+            teacherCode: { $in: userTeacherCodes }
+          }
+        ]
+      };
     }
 
     // Add search criteria
@@ -84,7 +102,7 @@ router.post('/', [
     }
 
     const { title, content, tags, isShared } = req.body;
-    const user = await User.findById(req.user.userId);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -93,7 +111,7 @@ router.post('/', [
       title,
       content,
       tags: tags || [],
-      authorId: req.user.userId,
+      authorId: req.user.id,
       authorName: user.registrationNumber,
       isShared: false
     };
@@ -134,11 +152,11 @@ router.put('/:id', [
     }
 
     // Check if user owns the note
-    if (note.authorId.toString() !== req.user.userId) {
+    if (note.authorId.toString() !== req.user.id) {
       return res.status(403).json({ message: 'Not authorized to update this note' });
     }
 
-    const user = await User.findById(req.user.userId);
+    const user = await User.findById(req.user.id);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -176,7 +194,7 @@ router.delete('/:id', auth, async (req: any, res: any) => {
     }
 
     // Check if user owns the note
-    if (note.authorId.toString() !== req.user.userId) {
+    if (note.authorId.toString() !== req.user.id) {
       return res.status(403).json({ message: 'Not authorized to delete this note' });
     }
 

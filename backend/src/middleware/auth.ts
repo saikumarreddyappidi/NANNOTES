@@ -10,6 +10,7 @@ export const auth = (req: any, res: any, next: any) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret') as any;
     req.user = decoded;
+    req.userId = decoded.id; // Add userId for compatibility
     next();
   } catch (error) {
     res.status(401).json({ message: 'Token is not valid' });

@@ -30,20 +30,44 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="w-96 h-auto min-h-[500px] max-h-[550px] bg-white shadow-xl rounded-xl border border-gray-100 flex flex-col">
+    <div className="min-h-screen flex items-center justify-center p-4" 
+         style={{
+           backgroundColor: '#fdfcf8',
+           backgroundImage: `
+             linear-gradient(rgba(200, 216, 236, 0.3) 1px, transparent 1px)
+           `,
+           backgroundSize: '100% 24px'
+         }}>
+
+      <div className="w-96 h-auto min-h-[500px] max-h-[550px] bg-[#fdfcf8] shadow-lg rounded-lg border-l-4 border-l-red-300 relative">
+        {/* Notebook Binding Effect */}
+        <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-red-100 to-transparent opacity-50"></div>
+        <div className="absolute left-6 top-4 bottom-4 w-px bg-red-200"></div>
+        
+        {/* Spiral Binding Holes */}
+        <div className="absolute left-2 top-12 w-2 h-2 bg-white rounded-full border border-gray-300"></div>
+        <div className="absolute left-2 top-20 w-2 h-2 bg-white rounded-full border border-gray-300"></div>
+        <div className="absolute left-2 top-28 w-2 h-2 bg-white rounded-full border border-gray-300"></div>
+        <div className="absolute left-2 bottom-28 w-2 h-2 bg-white rounded-full border border-gray-300"></div>
+        <div className="absolute left-2 bottom-20 w-2 h-2 bg-white rounded-full border border-gray-300"></div>
+        <div className="absolute left-2 bottom-12 w-2 h-2 bg-white rounded-full border border-gray-300"></div>
+
         {/* Header Section */}
-        <div className="text-center pt-8 pb-6 px-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">NANNOTES</h2>
-          <p className="text-sm text-gray-600">Educational Productivity Platform</p>
+        <div className="text-center pt-8 pb-6 px-12">
+          <h2 className="text-3xl font-bold text-gray-800 mb-2">
+            NANNOTES
+          </h2>
+          <p className="text-sm text-gray-600">
+            Educational Productivity Platform
+          </p>
         </div>
 
         {/* Form Section */}
-        <div className="flex-1 px-8 pb-8">
+        <div className="flex-1 px-12 pb-8">
           <div className="h-full flex flex-col justify-between">
-            <form className="space-y-5" onSubmit={handleSubmit}>
+            <form className="space-y-6" onSubmit={handleSubmit}>
               <div>
-                <label htmlFor="registrationNumber" className="block text-sm font-semibold text-gray-700 mb-2">
+                <label htmlFor="registrationNumber" className="block text-sm font-medium text-gray-700 mb-3">
                   Registration Number / Teacher Code
                 </label>
                 <input
@@ -53,13 +77,13 @@ const Login: React.FC = () => {
                   required
                   value={formData.registrationNumber}
                   onChange={handleChange}
-                  className="block w-full px-4 py-3 text-sm border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                  className="block w-full px-2 py-3 text-base bg-transparent border-0 border-b-2 border-blue-300 focus:outline-none focus:border-blue-500 transition duration-200"
                   placeholder="Enter your registration number or teacher code"
                 />
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-sm font-semibold text-gray-700 mb-2">
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-3">
                   Password
                 </label>
                 <input
@@ -69,26 +93,30 @@ const Login: React.FC = () => {
                   required
                   value={formData.password}
                   onChange={handleChange}
-                  className="block w-full px-4 py-3 text-sm border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition duration-200"
+                  className="block w-full px-2 py-3 text-base bg-transparent border-0 border-b-2 border-blue-300 focus:outline-none focus:border-blue-500 transition duration-200"
                   placeholder="Enter your password"
                 />
               </div>
 
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm text-center">
-                  {error}
+                <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded-r-lg">
+                  <span className="text-red-600 text-sm">{error}</span>
                 </div>
               )}
 
-              <div className="pt-2">
+              <div className="pt-4">
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition duration-200 shadow-md hover:shadow-lg"
+                  className="w-full py-3 px-6 text-white font-medium rounded-lg shadow-lg transition duration-200 hover:shadow-xl"
+                  style={{ 
+                    backgroundColor: '#3b82f6',
+                    fontSize: '16px'
+                  }}
                 >
                   {isLoading ? (
-                    <div className="flex items-center">
-                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <div className="flex items-center justify-center">
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
@@ -100,13 +128,28 @@ const Login: React.FC = () => {
                 </button>
               </div>
 
-              <div className="text-center pt-4 border-t border-gray-200">
-                <span className="text-sm text-gray-600">
-                  Don't have an account?{' '}
-                  <Link to="/register" className="font-semibold text-blue-600 hover:text-blue-500 transition duration-200">
-                    Register here
-                  </Link>
-                </span>
+              <div className="text-center pt-6">
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-[#fdfcf8] text-gray-500">
+                      New to NANNOTES?
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <span className="text-sm text-gray-600">
+                    Don't have an account?{' '}
+                    <Link 
+                      to="/register" 
+                      className="font-medium text-blue-600 hover:text-blue-500 transition duration-200 hover:underline"
+                    >
+                      Register here
+                    </Link>
+                  </span>
+                </div>
               </div>
             </form>
           </div>

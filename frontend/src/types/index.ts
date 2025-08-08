@@ -2,11 +2,13 @@ export interface User {
   _id?: string;
   id?: string;
   registrationNumber: string;
+  name?: string;
   role: 'student' | 'staff';
   year?: string;
   semester?: string;
   course?: string;
   teacherCode?: string;
+  connectedTeachers?: string[];
   subject?: string;
   createdAt: string;
 }

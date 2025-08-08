@@ -1,14 +1,40 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
+import api from '../services/api';
 
 const PDFManager: React.FC = () => {
+  const { user } = useSelector((state: RootState) => state.auth);
   const [pdfs, setPdfs] = useState<any[]>([]);
   const [selectedPDF, setSelectedPDF] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [annotationMode, setAnnotationMode] = useState<'none' | 'highlight' | 'textbox' | 'draw'>('none');
   const [annotations, setAnnotations] = useState<any[]>([]);
   const [isDrawing, setIsDrawing] = useState(false);
+  const [isShared, setIsShared] = useState(false);
+  const [editingSharing, setEditingSharing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Load saved PDFs
+  useEffect(() => {
+    loadSavedPDFs();
+  }, []);
+
+  const loadSavedPDFs = async () => {
+    try {
+      setIsLoading(true);
+      const response = await api.get('/files');
+      setPdfs(response.data);
+    } catch (error) {
+      console.error('Error loading saved PDFs:', error);
+      setPdfs([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -20,20 +46,27 @@ const PDFManager: React.FC = () => {
     setIsUploading(true);
     
     try {
-      // In a real app, you would upload to your server/S3
-      const fileUrl = URL.createObjectURL(file);
-      
-      const newPDF = {
-        id: Date.now().toString(),
-        title: file.name.replace('.pdf', ''),
-        filename: file.name,
-        fileUrl: fileUrl,
-        annotations: [],
-        createdAt: new Date().toISOString(),
+      // Convert file to base64 for API upload
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const fileData = e.target?.result as string;
+          
+          const response = await api.post('/files/upload', {
+            filename: file.name,
+            fileData: fileData,
+            isShared: user?.role === 'staff' ? isShared : false
+          });
+
+          setPdfs(prev => [response.data, ...prev]);
+          setIsShared(false);
+          alert('PDF uploaded successfully!');
+        } catch (error) {
+          console.error('API upload failed:', error);
+          alert('Failed to upload PDF. Please try again.');
+        }
       };
-      
-      setPdfs(prev => [newPDF, ...prev]);
-      alert('PDF uploaded successfully!');
+      reader.readAsDataURL(file);
     } catch (error) {
       console.error('Upload failed:', error);
       alert('Failed to upload PDF');
@@ -57,11 +90,21 @@ const PDFManager: React.FC = () => {
     }
   };
 
-  const handleDeletePDF = (id: string) => {
+  const handleDeletePDF = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this PDF?')) {
-      setPdfs(prev => prev.filter(pdf => pdf.id !== id));
-      if (selectedPDF?.id === id) {
-        setSelectedPDF(null);
+      try {
+        setIsLoading(true);
+        await api.delete(`/files/${id}`);
+        setPdfs(prev => prev.filter(pdf => pdf.id !== id));
+        if (selectedPDF?.id === id) {
+          setSelectedPDF(null);
+        }
+        alert('PDF deleted successfully!');
+      } catch (error) {
+        console.error('Error deleting PDF:', error);
+        alert('Failed to delete PDF. Please try again.');
+      } finally {
+        setIsLoading(false);
       }
     }
   };
@@ -102,22 +145,39 @@ const PDFManager: React.FC = () => {
     setAnnotationMode(annotationMode === 'draw' ? 'none' : 'draw');
   };
 
-  const handleSaveAnnotations = () => {
+  const handleSaveAnnotations = async () => {
     if (!selectedPDF) return;
     
-    // Update the selected PDF with annotations
-    const updatedPDF = {
-      ...selectedPDF,
-      annotations: annotations
-    };
-    
-    // Update the PDFs list
-    setPdfs(prev => prev.map(pdf => 
-      pdf.id === selectedPDF.id ? updatedPDF : pdf
-    ));
-    
-    setSelectedPDF(updatedPDF);
-    alert(`Saved ${annotations.length} annotation(s) successfully!`);
+    try {
+      setIsLoading(true);
+      // Update the selected PDF with annotations
+      const updatedPDF = {
+        ...selectedPDF,
+        annotations: annotations
+      };
+      
+      await api.put(`/files/${selectedPDF.id}`, {
+        annotations: annotations,
+        isShared: user?.role === 'staff' ? editingSharing : undefined
+      });
+      
+      // Update the PDFs list
+      setPdfs(prev => prev.map(pdf => 
+        pdf.id === selectedPDF.id ? updatedPDF : pdf
+      ));
+      
+      setSelectedPDF(updatedPDF);
+      alert(`Saved ${annotations.length} annotation(s) successfully!`);
+    } catch (error) {
+      console.error('Error saving annotations:', error);
+      alert('Failed to save annotations. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen);
   };
 
   const handleDeleteAnnotation = (id: string) => {
@@ -206,15 +266,17 @@ const PDFManager: React.FC = () => {
   useEffect(() => {
     if (selectedPDF && selectedPDF.annotations) {
       setAnnotations(selectedPDF.annotations);
+      setEditingSharing(selectedPDF.isShared || false);
     } else {
       setAnnotations([]);
+      setEditingSharing(false);
     }
   }, [selectedPDF]);
 
   return (
-    <div className="h-full flex">
+    <div className={`h-full flex ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}>
       {/* PDF List */}
-      <div className="w-1/3 bg-white border-r border-gray-200 flex flex-col">
+      <div className={`${isFullscreen ? 'hidden' : 'w-1/3'} bg-white border-r border-gray-200 flex flex-col`}>
         <div className="p-4 border-b border-gray-200">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-medium text-gray-900">PDF Files</h3>
@@ -226,6 +288,22 @@ const PDFManager: React.FC = () => {
               {isUploading ? 'Uploading...' : '+ Upload PDF'}
             </button>
           </div>
+          
+          {user?.role === 'staff' && (
+            <div className="flex items-center space-x-2 mb-3">
+              <input
+                type="checkbox"
+                id="sharePDF"
+                checked={isShared}
+                onChange={(e) => setIsShared(e.target.checked)}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              />
+              <label htmlFor="sharePDF" className="text-sm text-gray-700">
+                Share uploaded PDFs with students (using teacher code: {user.teacherCode})
+              </label>
+            </div>
+          )}
+          
           <input
             ref={fileInputRef}
             type="file"
@@ -236,7 +314,9 @@ const PDFManager: React.FC = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {pdfs.length === 0 ? (
+          {isLoading && pdfs.length === 0 ? (
+            <div className="p-4 text-center text-gray-500">Loading PDFs...</div>
+          ) : pdfs.length === 0 ? (
             <div className="p-4 text-center text-gray-500">
               <svg className="w-12 h-12 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -311,6 +391,12 @@ const PDFManager: React.FC = () => {
                   <p className="text-sm text-gray-600">{selectedPDF.filename}</p>
                 </div>
                 <div className="flex space-x-2">
+                  <button
+                    onClick={toggleFullscreen}
+                    className="bg-purple-500 text-white px-3 py-1 rounded-md text-sm hover:bg-purple-600"
+                  >
+                    {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                  </button>
                   <button 
                     onClick={handleHighlight}
                     className={`px-3 py-1 rounded-md text-sm transition-colors ${
@@ -343,16 +429,32 @@ const PDFManager: React.FC = () => {
                   </button>
                   <button 
                     onClick={handleSaveAnnotations}
-                    className="bg-purple-500 text-white px-3 py-1 rounded-md text-sm hover:bg-purple-600 transition-colors"
+                    disabled={isLoading}
+                    className="bg-purple-500 text-white px-3 py-1 rounded-md text-sm hover:bg-purple-600 transition-colors disabled:opacity-50"
                   >
-                    💾 Save ({annotations.length})
+                    {isLoading ? 'Saving...' : `💾 Save (${annotations.length})`}
                   </button>
                 </div>
+                
+                {user?.role === 'staff' && selectedPDF && (
+                  <div className="flex items-center space-x-2 mt-3">
+                    <input
+                      type="checkbox"
+                      id="sharePDFEdit"
+                      checked={editingSharing}
+                      onChange={(e) => setEditingSharing(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="sharePDFEdit" className="text-sm text-gray-700">
+                      Share this PDF with students (using teacher code: {user.teacherCode})
+                    </label>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* PDF Viewer Area */}
-            <div className="flex-1 overflow-auto bg-gray-100 p-4">
+            <div className={`flex-1 overflow-auto bg-gray-100 p-4 ${isFullscreen ? 'p-2' : ''}`}>
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 min-h-full">
                 {/* Try to embed PDF, fallback to manual open */}
                 <div className="h-full flex flex-col relative">
@@ -366,10 +468,10 @@ const PDFManager: React.FC = () => {
                       }`}
                     >
                       <iframe
-                        src={selectedPDF.fileUrl}
+                        src={selectedPDF.fileData || selectedPDF.fileUrl}
                         width="100%"
-                        height="100%"
-                        style={{ minHeight: '500px', pointerEvents: annotationMode !== 'none' ? 'none' : 'auto' }}
+                        height={isFullscreen ? window.innerHeight - 150 : "100%"}
+                        style={{ minHeight: isFullscreen ? window.innerHeight - 150 : '500px', pointerEvents: annotationMode !== 'none' ? 'none' : 'auto' }}
                         title={selectedPDF.title}
                         onError={() => {
                           console.log('PDF iframe failed, using fallback');
@@ -381,8 +483,8 @@ const PDFManager: React.FC = () => {
                     {annotationMode === 'draw' && (
                       <canvas
                         ref={canvasRef}
-                        width={800}
-                        height={500}
+                        width={isFullscreen ? window.innerWidth - 20 : 800}
+                        height={isFullscreen ? window.innerHeight - 200 : 500}
                         className="absolute top-0 left-0 cursor-crosshair"
                         style={{ 
                           width: '100%', 
@@ -406,64 +508,68 @@ const PDFManager: React.FC = () => {
                       </div>
                     )}
                   </div>
-                  <div className="p-4 border-t border-gray-200 text-center">
-                    <p className="text-sm text-gray-600 mb-2">
-                      Can't see the PDF? Try opening it in a new tab.
-                    </p>
-                    <button
-                      onClick={() => handleViewPDF(selectedPDF)}
-                      className="bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-primary-700"
-                    >
-                      Open PDF in New Tab
-                    </button>
-                  </div>
+                  {!isFullscreen && (
+                    <div className="p-4 border-t border-gray-200 text-center">
+                      <p className="text-sm text-gray-600 mb-2">
+                        Can't see the PDF? Try opening it in a new tab.
+                      </p>
+                      <button
+                        onClick={() => handleViewPDF(selectedPDF)}
+                        className="bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-primary-700"
+                      >
+                        Open PDF in New Tab
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
             {/* Annotations Panel */}
-            <div className="bg-gray-50 border-t border-gray-200 p-4">
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="text-sm font-medium text-gray-900">Annotations ({annotations.length})</h3>
-                {annotations.length > 0 && (
-                  <button
-                    onClick={() => setAnnotations([])}
-                    className="text-red-600 hover:text-red-800 text-xs"
-                  >
-                    Clear All
-                  </button>
-                )}
-              </div>
-              <div className="max-h-32 overflow-y-auto">
-                {annotations.length > 0 ? (
-                  annotations.map((annotation: any) => (
-                    <div key={annotation.id} className="bg-white p-2 rounded-md mb-2 text-sm">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <span className="font-medium capitalize">{annotation.type}</span>
-                          <span className="text-xs text-gray-500 ml-2">
-                            {new Date(annotation.timestamp).toLocaleTimeString()}
-                          </span>
+            {!isFullscreen && (
+              <div className="bg-gray-50 border-t border-gray-200 p-4">
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-sm font-medium text-gray-900">Annotations ({annotations.length})</h3>
+                  {annotations.length > 0 && (
+                    <button
+                      onClick={() => setAnnotations([])}
+                      className="text-red-600 hover:text-red-800 text-xs"
+                    >
+                      Clear All
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-32 overflow-y-auto">
+                  {annotations.length > 0 ? (
+                    annotations.map((annotation: any) => (
+                      <div key={annotation.id} className="bg-white p-2 rounded-md mb-2 text-sm">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <span className="font-medium capitalize">{annotation.type}</span>
+                            <span className="text-xs text-gray-500 ml-2">
+                              {new Date(annotation.timestamp).toLocaleTimeString()}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteAnnotation(annotation.id)}
+                            className="text-red-500 hover:text-red-700 text-xs ml-2"
+                          >
+                            ✕
+                          </button>
                         </div>
-                        <button
-                          onClick={() => handleDeleteAnnotation(annotation.id)}
-                          className="text-red-500 hover:text-red-700 text-xs ml-2"
-                        >
-                          ✕
-                        </button>
+                        {annotation.content && (
+                          <p className="text-gray-600 mt-1">{annotation.content}</p>
+                        )}
                       </div>
-                      {annotation.content && (
-                        <p className="text-gray-600 mt-1">{annotation.content}</p>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-gray-500 text-sm">
-                    No annotations yet. Use the tools above to add highlights, text, or drawings.
-                  </p>
-                )}
+                    ))
+                  ) : (
+                    <p className="text-gray-500 text-sm">
+                      No annotations yet. Use the tools above to add highlights, text, or drawings.
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         ) : (
           <div className="flex-1 flex items-center justify-center text-gray-500">

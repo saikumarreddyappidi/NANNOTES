@@ -9,6 +9,9 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import noteRoutes from './routes/notes';
 import fileRoutes from './routes/files';
+import whiteboardRoutes from './routes/whiteboard';
+import pdfRoutes from './routes/pdf';
+import teacherRoutes from './routes/teacher';
 
 // Middleware
 import { errorHandler } from './middleware/errorHandler';
@@ -41,19 +44,37 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/nannotes')
-  .then(() => {
-    console.log('Connected to MongoDB');
-  })
-  .catch((error) => {
-    console.error('MongoDB connection error:', error);
-    process.exit(1);
-  });
+if (process.env.NODE_ENV === 'development') {
+  // For development, try to connect to local MongoDB first
+  mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/nannotes-dev')
+    .then(() => {
+      console.log('Connected to local MongoDB');
+    })
+    .catch(async (error) => {
+      console.log('Local MongoDB not available, using in-memory database');
+      // If local MongoDB fails, use in-memory database
+      const { setupMemoryDatabase } = await import('./database/memory-db');
+      await setupMemoryDatabase();
+    });
+} else {
+  // For production, use the provided MongoDB URI
+  mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/nannotes')
+    .then(() => {
+      console.log('Connected to MongoDB');
+    })
+    .catch((error) => {
+      console.error('MongoDB connection error:', error);
+      process.exit(1);
+    });
+}
 
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/notes', noteRoutes);
 app.use('/api/files', fileRoutes);
+app.use('/api/files', pdfRoutes);
+app.use('/api/whiteboards', whiteboardRoutes);
+app.use('/api/teachers', teacherRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

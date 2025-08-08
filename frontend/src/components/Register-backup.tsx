@@ -17,8 +17,8 @@ const Register: React.FC = () => {
     year: '',
     semester: '',
     course: '',
+    teacherCode: '',
     subject: '',
-    teacherCode: '', // Optional field for students to connect to teachers
   });
 
   const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
@@ -56,70 +56,21 @@ const Register: React.FC = () => {
     }
 
     // Validate role-specific required fields
-    if (formData.role === 'staff') {
-      if (!formData.registrationNumber.trim()) {
-        alert('Staff ID is required for staff registration');
-        return;
-      }
-      if (!formData.teacherCode.trim()) {
-        alert('Teacher code is required for staff registration');
-        return;
-      }
-      if (formData.teacherCode.length < 4) {
-        alert('Teacher code must be at least 4 characters long');
-        return;
-      }
-      if (!formData.subject.trim()) {
-        alert('Subject is required for staff registration');
-        return;
-      }
-      if (!formData.year.trim()) {
-        alert('Year is required for staff registration');
-        return;
-      }
-      if (!formData.semester.trim()) {
-        alert('Semester is required for staff registration');
-        return;
-      }
+    if (formData.role === 'staff' && !formData.teacherCode.trim()) {
+      alert('Teacher code is required for staff registration');
+      return;
     }
 
-    if (formData.role === 'student') {
-      if (!formData.registrationNumber.trim()) {
-        alert('Registration number is required for student registration');
-        return;
-      }
-      if (!formData.year.trim()) {
-        alert('Year is required for student registration');
-        return;
-      }
-      if (!formData.semester.trim()) {
-        alert('Semester is required for student registration');
-        return;
-      }
-      if (!formData.course.trim()) {
-        alert('Course is required for student registration');
-        return;
-      }
+    if (formData.role === 'student' && !formData.registrationNumber.trim()) {
+      alert('Registration number is required for student registration');
+      return;
     }
 
     try {
-      console.log('Attempting registration with data:', formData);
-      const result = await dispatch(register(formData)).unwrap();
-      console.log('Registration successful:', result);
+      await dispatch(register(formData)).unwrap();
       navigate('/dashboard');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Registration failed:', error);
-      let errorMessage = 'Registration failed. Please try again.';
-      
-      if (error?.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error?.message) {
-        errorMessage = error.message;
-      } else if (error?.response?.data?.errors) {
-        errorMessage = error.response.data.errors.map((e: any) => e.msg).join(', ');
-      }
-      
-      alert(errorMessage);
     }
   };
 
@@ -177,21 +128,40 @@ const Register: React.FC = () => {
                 </select>
               </div>
 
-              <div>
-                <label htmlFor="registrationNumber" className="block text-sm font-medium text-gray-700 mb-2">
-                  {formData.role === 'student' ? 'Student Registration Number' : 'Staff ID / Employee Number'}
-                </label>
-                <input
-                  id="registrationNumber"
-                  name="registrationNumber"
-                  type="text"
-                  required
-                  value={formData.registrationNumber}
-                  onChange={handleChange}
-                  className="block w-full px-2 py-2 text-base bg-transparent border-0 border-b-2 border-blue-300 focus:outline-none focus:border-blue-500 transition duration-200"
-                  placeholder={formData.role === 'student' ? 'Enter your student registration number' : 'Enter your staff ID or employee number'}
-                />
-              </div>
+              {formData.role === 'student' && (
+                <div>
+                  <label htmlFor="registrationNumber" className="block text-sm font-medium text-gray-700 mb-2">
+                    Registration Number
+                  </label>
+                  <input
+                    id="registrationNumber"
+                    name="registrationNumber"
+                    type="text"
+                    required
+                    value={formData.registrationNumber}
+                    onChange={handleChange}
+                    className="block w-full px-2 py-2 text-base bg-transparent border-0 border-b-2 border-blue-300 focus:outline-none focus:border-blue-500 transition duration-200"
+                  />
+                </div>
+              )}
+
+              {formData.role === 'staff' && (
+                <div>
+                  <label htmlFor="teacherCode" className="block text-sm font-medium text-gray-700 mb-2">
+                    Teacher Code
+                  </label>
+                  <input
+                    id="teacherCode"
+                    name="teacherCode"
+                    type="text"
+                    required
+                    value={formData.teacherCode}
+                    onChange={handleChange}
+                    className="block w-full px-2 py-2 text-base bg-transparent border-0 border-b-2 border-blue-300 focus:outline-none focus:border-blue-500 transition duration-200"
+                    placeholder="Enter your unique teacher code"
+                  />
+                </div>
+              )}
 
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
@@ -245,7 +215,6 @@ const Register: React.FC = () => {
                         name="year"
                         value={formData.year}
                         onChange={handleChange}
-                        required
                         className="block w-full px-2 py-2 text-sm bg-transparent border-0 border-b-2 border-blue-300 focus:outline-none focus:border-blue-500 transition duration-200"
                       >
                         <option value="">Select Year</option>
@@ -264,7 +233,6 @@ const Register: React.FC = () => {
                         name="semester"
                         value={formData.semester}
                         onChange={handleChange}
-                        required
                         className="block w-full px-2 py-2 text-sm bg-transparent border-0 border-b-2 border-blue-300 focus:outline-none focus:border-blue-500 transition duration-200"
                       >
                         <option value="">Select Semester</option>
@@ -283,7 +251,6 @@ const Register: React.FC = () => {
                       type="text"
                       value={formData.course}
                       onChange={handleChange}
-                      required
                       className="block w-full px-2 py-2 text-base bg-transparent border-0 border-b-2 border-blue-300 focus:outline-none focus:border-blue-500 transition duration-200"
                       placeholder="e.g., Computer Science"
                     />
@@ -301,31 +268,11 @@ const Register: React.FC = () => {
                       id="subject"
                       name="subject"
                       type="text"
-                      required
                       value={formData.subject}
                       onChange={handleChange}
                       className="block w-full px-2 py-2 text-base bg-transparent border-0 border-b-2 border-blue-300 focus:outline-none focus:border-blue-500 transition duration-200"
                       placeholder="e.g., Mathematics"
                     />
-                  </div>
-                  <div>
-                    <label htmlFor="teacherCode" className="block text-sm font-medium text-gray-700 mb-2">
-                      Teacher Code <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="teacherCode"
-                      name="teacherCode"
-                      type="text"
-                      required
-                      value={formData.teacherCode}
-                      onChange={handleChange}
-                      className="block w-full px-2 py-2 text-base bg-transparent border-0 border-b-2 border-blue-300 focus:outline-none focus:border-blue-500 transition duration-200"
-                      placeholder="Create your unique teacher code (e.g., MATH2024A)"
-                      maxLength={20}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Create a unique code that students will use to access your shared notes. Make it memorable and related to your subject.
-                    </p>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -337,7 +284,6 @@ const Register: React.FC = () => {
                         name="year"
                         value={formData.year}
                         onChange={handleChange}
-                        required
                         className="block w-full px-2 py-2 text-sm bg-transparent border-0 border-b-2 border-blue-300 focus:outline-none focus:border-blue-500 transition duration-200"
                       >
                         <option value="">Select Year</option>
@@ -356,7 +302,6 @@ const Register: React.FC = () => {
                         name="semester"
                         value={formData.semester}
                         onChange={handleChange}
-                        required
                         className="block w-full px-2 py-2 text-sm bg-transparent border-0 border-b-2 border-blue-300 focus:outline-none focus:border-blue-500 transition duration-200"
                       >
                         <option value="">Select Semester</option>
@@ -364,18 +309,6 @@ const Register: React.FC = () => {
                         <option value="2">2nd Semester</option>
                       </select>
                     </div>
-                  </div>
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
-                    <div className="flex items-center mb-2">
-                      <svg className="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <h4 className="text-sm font-medium text-blue-900">Teacher Code</h4>
-                    </div>
-                    <p className="text-xs text-blue-700">
-                      Your teacher code will be used by students to access your shared notes. 
-                      Choose a memorable code that represents your subject and class.
-                    </p>
                   </div>
                 </>
               )}

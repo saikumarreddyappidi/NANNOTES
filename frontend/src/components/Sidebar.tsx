@@ -2,6 +2,7 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 
 const Sidebar: React.FC = () => {
+
   const menuItems = [
     {
       name: 'Dashboard',

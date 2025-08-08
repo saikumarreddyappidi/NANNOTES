@@ -1,5 +1,5 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { AuthState, User } from '../types';
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { AuthState } from '../types';
 import api from '../services/api';
 
 const initialState: AuthState = {
@@ -21,19 +21,35 @@ export const register = createAsyncThunk(
     course?: string;
     teacherCode?: string;
     subject?: string;
-  }) => {
-    const response = await api.post('/auth/register', userData);
-    localStorage.setItem('token', response.data.token);
-    return response.data;
+  }, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/auth/register', userData);
+      localStorage.setItem('token', response.data.token);
+      return response.data;
+    } catch (error: any) {
+      console.error('Registration API error:', error);
+      if (error.response?.data) {
+        return rejectWithValue(error.response.data);
+      }
+      return rejectWithValue({ message: 'Network error. Please check your connection.' });
+    }
   }
 );
 
 export const login = createAsyncThunk(
   'auth/login',
-  async (credentials: { registrationNumber: string; password: string }) => {
-    const response = await api.post('/auth/login', credentials);
-    localStorage.setItem('token', response.data.token);
-    return response.data;
+  async (credentials: { registrationNumber: string; password: string }, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/auth/login', credentials);
+      localStorage.setItem('token', response.data.token);
+      return response.data;
+    } catch (error: any) {
+      console.error('Login API error:', error);
+      if (error.response?.data) {
+        return rejectWithValue(error.response.data);
+      }
+      return rejectWithValue({ message: 'Network error. Please check your connection.' });
+    }
   }
 );
 
@@ -72,7 +88,8 @@ const authSlice = createSlice({
       })
       .addCase(register.rejected, (state, action) => {
         state.isLoading = false;
-        state.error = action.error.message || 'Registration failed';
+        const payload = action.payload as any;
+        state.error = payload?.message || action.error.message || 'Registration failed';
       })
       // Login
       .addCase(login.pending, (state) => {
@@ -86,7 +103,8 @@ const authSlice = createSlice({
       })
       .addCase(login.rejected, (state, action) => {
         state.isLoading = false;
-        state.error = action.error.message || 'Login failed';
+        const payload = action.payload as any;
+        state.error = payload?.message || action.error.message || 'Login failed';
       })
       // Get current user
       .addCase(getCurrentUser.fulfilled, (state, action) => {

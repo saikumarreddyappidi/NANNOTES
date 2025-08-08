@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { NotesState, Note } from '../types';
+import { NotesState } from '../types';
 import api from '../services/api';
 
 const initialState: NotesState = {
@@ -15,7 +15,7 @@ export const fetchNotes = createAsyncThunk(
   'notes/fetchNotes',
   async () => {
     const response = await api.get('/notes');
-    return response.data.notes; // Backend returns { notes: [...] }
+    return response.data.notes || response.data;
   }
 );
 
@@ -23,7 +23,7 @@ export const createNote = createAsyncThunk(
   'notes/createNote',
   async (noteData: { title: string; content: string; tags: string[]; isShared?: boolean }) => {
     const response = await api.post('/notes', noteData);
-    return response.data.note; // Backend returns { note: {...} }
+    return response.data.note || response.data;
   }
 );
 
@@ -31,7 +31,7 @@ export const updateNote = createAsyncThunk(
   'notes/updateNote',
   async ({ id, ...noteData }: { id: string; title: string; content: string; tags: string[]; isShared?: boolean }) => {
     const response = await api.put(`/notes/${id}`, noteData);
-    return response.data.note; // Backend returns { note: {...} }
+    return response.data.note || response.data;
   }
 );
 
@@ -81,25 +81,57 @@ const notesSlice = createSlice({
       .addCase(fetchNotes.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.error.message || 'Failed to fetch notes';
+        state.notes = []; // Ensure notes is always an array
       })
       // Create note
+      .addCase(createNote.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
       .addCase(createNote.fulfilled, (state, action) => {
+        state.isLoading = false;
         state.notes.unshift(action.payload);
       })
+      .addCase(createNote.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.error.message || 'Failed to create note';
+      })
       // Update note
+      .addCase(updateNote.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
       .addCase(updateNote.fulfilled, (state, action) => {
+        state.isLoading = false;
         const index = state.notes.findIndex(note => note._id === action.payload._id);
         if (index !== -1) {
           state.notes[index] = action.payload;
         }
       })
+      .addCase(updateNote.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.error.message || 'Failed to update note';
+      })
       // Delete note
+      .addCase(deleteNote.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
       .addCase(deleteNote.fulfilled, (state, action) => {
+        state.isLoading = false;
         state.notes = state.notes.filter(note => note._id !== action.payload);
+      })
+      .addCase(deleteNote.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.error.message || 'Failed to delete note';
       })
       // Search notes
       .addCase(searchNotes.fulfilled, (state, action) => {
         state.notes = action.payload;
+      })
+      .addCase(searchNotes.rejected, (state, action) => {
+        state.error = action.error.message || 'Failed to search notes';
+        state.notes = []; // Ensure notes is always an array
       });
   },
 });

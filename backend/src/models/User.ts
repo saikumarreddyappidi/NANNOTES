@@ -9,6 +9,7 @@ export interface IUser extends Document {
   semester?: string;
   course?: string;
   teacherCode?: string;
+  teacherCodes?: string[]; // Array of teacher codes for students
   subject?: string;
   createdAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -63,6 +64,9 @@ const userSchema = new Schema<IUser>({
       return this.role === 'staff';
     }
   },
+  teacherCodes: [{
+    type: String
+  }], // Array of teacher codes that students have added
   createdAt: {
     type: Date,
     default: Date.now
@@ -80,15 +84,6 @@ userSchema.pre('save', async function(next) {
   } catch (error: any) {
     next(error);
   }
-});
-
-// Generate teacher code for staff
-userSchema.pre('save', function(next) {
-  if (this.role === 'staff' && !this.teacherCode) {
-    // Generate a unique teacher code
-    this.teacherCode = `TC${Date.now()}${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
-  }
-  next();
 });
 
 // Compare password method

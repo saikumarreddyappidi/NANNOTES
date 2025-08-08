@@ -1,15 +1,11 @@
 import React, { useState } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
-import { RootState, AppDispatch } from '../store';
-import { fetchNotes } from '../store/notesSlice';
-import api from '../services/api';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
+import TeacherConnection from './TeacherConnection';
 
 const DashboardHome: React.FC = () => {
-  const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
   const { notes } = useSelector((state: RootState) => state.notes);
-  const [teacherCode, setTeacherCode] = useState('');
-  const [searchMessage, setSearchMessage] = useState('');
   const [selectedNote, setSelectedNote] = useState<any>(null);
 
   const handleNoteClick = (note: any) => {
@@ -18,34 +14,6 @@ const DashboardHome: React.FC = () => {
 
   const closeNoteView = () => {
     setSelectedNote(null);
-  };
-
-  const handleTeacherCodeSearch = async () => {
-    if (!teacherCode.trim()) {
-      setSearchMessage('Please enter a teacher code');
-      return;
-    }
-
-    try {
-      setSearchMessage('Connecting to teacher...');
-      
-      const response = await api.post('/auth/connect-teacher', {
-        teacherCode: teacherCode.trim()
-      });
-      
-      setSearchMessage(`Successfully connected to ${response.data.teacherName}! Refreshing notes...`);
-      
-      setTimeout(async () => {
-        await dispatch(fetchNotes());
-        setSearchMessage(`Connected to ${response.data.teacherName} (${response.data.teacherSubject}). You can now see their shared notes.`);
-        setTeacherCode('');
-      }, 1000);
-      
-    } catch (error: any) {
-      console.error('Teacher code search failed:', error);
-      const errorMessage = error.response?.data?.error || 'Teacher code not found. Please check and try again.';
-      setSearchMessage(errorMessage);
-    }
   };
 
   const quickStats = [
@@ -162,43 +130,8 @@ const DashboardHome: React.FC = () => {
         </div>
       )}
 
-      {user?.role === 'student' && (
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Access Teacher Notes</h2>
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-            <div className="flex items-center mb-3">
-              <svg className="w-5 h-5 text-green-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <h3 className="text-lg font-medium text-green-900">Enter Teacher Code</h3>
-            </div>
-            <div className="flex space-x-3 mb-3">
-              <input
-                type="text"
-                value={teacherCode}
-                onChange={(e) => setTeacherCode(e.target.value.toUpperCase())}
-                placeholder="Enter teacher code (e.g., TC12345678)"
-                className="flex-1 px-3 py-2 border border-green-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                maxLength={10}
-              />
-              <button
-                onClick={handleTeacherCodeSearch}
-                className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
-              >
-                Connect
-              </button>
-            </div>
-            {searchMessage && (
-              <div className={`text-sm p-2 rounded ${searchMessage.includes('success') ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                {searchMessage}
-              </div>
-            )}
-            <p className="text-green-700 text-sm">
-              Enter your teacher's code to access their shared notes and study materials.
-            </p>
-          </div>
-        </div>
-      )}
+      {/* Teacher Connection Component */}
+      <TeacherConnection />
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
