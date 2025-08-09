@@ -39,7 +39,7 @@ const Notepad: React.FC = () => {
     setTitle(note.title);
     setContent(note.content);
     setTags(note.tags || []);
-    setIsShared(note.isShared || false);
+    setIsShared(note.shared || false);
   };
 
   const handleSaveNote = async () => {
@@ -52,7 +52,7 @@ const Notepad: React.FC = () => {
       title: title.trim(),
       content,
       tags,
-      isShared: user?.role === 'staff' ? isShared : false,
+      shared: user?.role === 'staff' ? isShared : false,
     };
 
     try {
@@ -210,12 +210,12 @@ const Notepad: React.FC = () => {
                   ))}
                 </div>
                 <div className="flex justify-between items-center text-xs text-gray-500">
-                  <span>By: {note.authorName}</span>
+                  <span>By: {note.createdByName}</span>
                   <span>{new Date(note.createdAt).toLocaleDateString()}</span>
                 </div>
-                {note.teacherCode && (
+                {note.shared && (
                   <div className="text-xs text-green-600 font-medium">
-                    Teacher Shared
+                    Shared Note
                   </div>
                 )}
               </div>
@@ -300,7 +300,7 @@ const Notepad: React.FC = () => {
               </div>
 
               {user?.role === 'staff' && (
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-2 mb-4">
                   <input
                     type="checkbox"
                     id="isShared"
@@ -309,7 +309,7 @@ const Notepad: React.FC = () => {
                     className="rounded border-gray-300"
                   />
                   <label htmlFor="isShared" className="text-sm text-gray-700">
-                    Share with students using Teacher Code
+                    Share with students (students can search by your registration number)
                   </label>
                 </div>
               )}

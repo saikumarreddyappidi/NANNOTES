@@ -1,9 +1,13 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
 
 const Sidebar: React.FC = () => {
+  const { user } = useSelector((state: RootState) => state.auth);
 
-  const menuItems = [
+  // Base menu items available to all users
+  const baseMenuItems = [
     {
       name: 'Dashboard',
       path: '/dashboard',
@@ -13,6 +17,10 @@ const Sidebar: React.FC = () => {
         </svg>
       ),
     },
+  ];
+
+  // Staff-only menu items
+  const staffMenuItems = [
     {
       name: 'Notepad',
       path: '/dashboard/notes',
@@ -41,6 +49,11 @@ const Sidebar: React.FC = () => {
       ),
     },
   ];
+
+  // Determine menu items based on user role
+  const menuItems = user?.role === 'staff' 
+    ? [...baseMenuItems, ...staffMenuItems] 
+    : baseMenuItems; // Students only get dashboard access
 
   return (
     <div className="bg-gray-900 text-white w-64 min-h-screen p-4">

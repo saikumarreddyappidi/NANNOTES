@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
-import TeacherConnection from './TeacherConnection';
+import SimpleNotesSearch from './SimpleNotesSearch';
 
 const DashboardHome: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
@@ -27,8 +27,8 @@ const DashboardHome: React.FC = () => {
       ),
     },
     {
-      title: 'Shared Notes',
-      value: notes.filter(note => note.isShared).length,
+      title: user?.role === 'staff' ? 'Shared Notes' : 'Saved Notes',
+      value: user?.role === 'staff' ? notes.filter(note => note.shared).length : notes.filter(note => note.copiedFromStaffId).length,
       icon: (
         <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
@@ -36,8 +36,8 @@ const DashboardHome: React.FC = () => {
       ),
     },
     {
-      title: 'Personal Notes',
-      value: notes.filter(note => !note.isShared).length,
+      title: user?.role === 'staff' ? 'Private Notes' : 'Personal Notes',
+      value: user?.role === 'staff' ? notes.filter(note => !note.shared).length : notes.filter(note => !note.copiedFromStaffId).length,
       icon: (
         <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -108,152 +108,170 @@ const DashboardHome: React.FC = () => {
         </div>
       </div>
 
-      {/* Teacher Code Section */}
+      {/* Teacher ID Display for Staff */}
       {user?.role === 'staff' && (
         <div className="bg-white rounded-lg shadow-sm p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Share Notes with Students</h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Teacher ID</h2>
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <div className="flex items-center mb-3">
               <svg className="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-6 6c-3 0-5.5-1-5.5-1l-4.5-4.5s1-2.5 1-5.5a6 6 0 016-6z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
               </svg>
-              <h3 className="text-lg font-medium text-blue-900">Your Teacher Code</h3>
+              <h3 className="text-lg font-medium text-blue-900">Teacher ID Number</h3>
             </div>
             <div className="bg-white border border-blue-300 rounded-md p-3 mb-3">
-              <code className="text-2xl font-bold text-blue-600">{user?.teacherCode}</code>
+              <code className="text-2xl font-bold text-blue-600">{user?.registrationNumber}</code>
             </div>
             <p className="text-blue-700 text-sm">
-              Share this code with students so they can access your shared notes. When you create notes and mark them as "shared", 
-              students who have entered your teacher code will see them in their dashboard.
+              Students can use this ID number to search for and view all your notes. 
+              All notes you create are automatically available to students who search for your ID.
             </p>
           </div>
         </div>
       )}
 
-      {/* Teacher Connection Component */}
-      <TeacherConnection />
+      {/* 🎯 CORE OBJECTIVE: Student dashboard is empty by default */}
+      {/* Notes are fetched and displayed only when student searches for a valid Staff ID */}
+      {/* The notes are displayed, not permanently copied to the student's account */}
+      {user?.role === 'student' && <SimpleNotesSearch />}
 
-      {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {quickStats.map((stat, index) => (
-          <div key={index} className="bg-white rounded-lg shadow-sm p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                {stat.icon}
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">{stat.title}</p>
-                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Recent Notes */}
-      <div className="bg-white rounded-lg shadow-sm">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Recent Notes</h2>
-        </div>
-        <div className="p-6">
-          {recentNotes.length === 0 ? (
-            <div className="text-center py-8">
-              <svg className="w-12 h-12 mx-auto text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-              <p className="text-gray-500 mt-2">No notes yet. Start by creating your first note!</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {recentNotes.map((note) => (
-                <div 
-                  key={note._id} 
-                  className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors"
-                  onClick={() => handleNoteClick(note)}
-                >
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <h3 className="font-medium text-gray-900 hover:text-blue-600">{note.title}</h3>
-                      <p className="text-sm text-gray-600 mt-1">
-                        By: {note.authorName} | Created: {new Date(note.createdAt).toLocaleDateString()} {new Date(note.createdAt).toLocaleTimeString()}
-                        {note.updatedAt && note.updatedAt !== note.createdAt && (
-                          <span> | Updated: {new Date(note.updatedAt).toLocaleDateString()} {new Date(note.updatedAt).toLocaleTimeString()}</span>
-                        )}
-                      </p>
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {note.tags?.slice(0, 3).map((tag) => (
-                          <span
-                            key={tag}
-                            className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full"
-                          >
-                            #{tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end space-y-1">
-                      {note.isShared && (
-                        <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
-                          Shared
-                        </span>
-                      )}
-                      <span className="text-xs text-gray-400">Click to view</span>
-                    </div>
+      {/* Staff-only sections: Quick Stats and Recent Notes */}
+      {user?.role === 'staff' && (
+        <>
+          {/* Quick Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {quickStats.map((stat, index) => (
+              <div key={index} className="bg-white rounded-lg shadow-sm p-6">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    {stat.icon}
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-gray-500">{stat.title}</p>
+                    <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+              </div>
+            ))}
+          </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="text-center">
-            <div className="bg-blue-50 p-4 rounded-full w-16 h-16 mx-auto mb-4">
-              <svg className="w-8 h-8 text-blue-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
+          {/* Recent Notes */}
+          <div className="bg-white rounded-lg shadow-sm">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Recent Notes</h2>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Create Note</h3>
-            <p className="text-gray-600 text-sm mb-4">Start writing your thoughts and ideas</p>
-            <button className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700">
-              New Note
-            </button>
+            <div className="p-6">
+              {recentNotes.length === 0 ? (
+                <div className="text-center py-8">
+                  <svg className="w-12 h-12 mx-auto text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  <p className="text-gray-500 mt-2">No notes yet. Start by creating your first note!</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {recentNotes.map((note) => (
+                    <div 
+                      key={note._id} 
+                      className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                      onClick={() => handleNoteClick(note)}
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h3 className="font-medium text-gray-900 hover:text-blue-600">{note.title}</h3>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {note.copiedFromStaffId ? (
+                              <>Saved from: {note.copiedFromStaffName} | Saved: {new Date(note.createdAt).toLocaleDateString()}</>
+                            ) : (
+                              <>By: {note.createdByName} | Created: {new Date(note.createdAt).toLocaleDateString()} {new Date(note.createdAt).toLocaleTimeString()}</>
+                            )}
+                            {note.updatedAt && note.updatedAt !== note.createdAt && (
+                              <span> | Updated: {new Date(note.updatedAt).toLocaleDateString()} {new Date(note.updatedAt).toLocaleTimeString()}</span>
+                            )}
+                          </p>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {note.tags?.slice(0, 3).map((tag) => (
+                              <span
+                                key={tag}
+                                className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full"
+                              >
+                                #{tag}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end space-y-1">
+                          {note.shared && user?.role === 'staff' && (
+                            <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                              Shared
+                            </span>
+                          )}
+                          {note.copiedFromStaffId && (
+                            <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+                              From Teacher
+                            </span>
+                          )}
+                          <span className="text-xs text-gray-400">Click to view</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Quick Actions - Staff Only */}
+      {user?.role === 'staff' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="text-center">
+              <div className="bg-blue-50 p-4 rounded-full w-16 h-16 mx-auto mb-4">
+                <svg className="w-8 h-8 text-blue-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Create Note</h3>
+              <p className="text-gray-600 text-sm mb-4">Start writing your thoughts and ideas</p>
+              <button className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700">
+                New Note
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="text-center">
+              <div className="bg-green-50 p-4 rounded-full w-16 h-16 mx-auto mb-4">
+                <svg className="w-8 h-8 text-green-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Draw & Sketch</h3>
+              <p className="text-gray-600 text-sm mb-4">Express ideas with drawings and diagrams</p>
+              <button className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700">
+                Open Whiteboard
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-sm p-6">
+            <div className="text-center">
+              <div className="bg-purple-50 p-4 rounded-full w-16 h-16 mx-auto mb-4">
+                <svg className="w-8 h-8 text-purple-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Upload PDF</h3>
+              <p className="text-gray-600 text-sm mb-4">Manage and annotate PDF documents</p>
+              <button className="bg-purple-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-purple-700">
+                Upload PDF
+              </button>
+            </div>
           </div>
         </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="text-center">
-            <div className="bg-green-50 p-4 rounded-full w-16 h-16 mx-auto mb-4">
-              <svg className="w-8 h-8 text-green-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zM21 5a2 2 0 00-2-2h-4a2 2 0 00-2 2v12a4 4 0 004 4h4a2 2 0 002-2V5z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Draw & Sketch</h3>
-            <p className="text-gray-600 text-sm mb-4">Express ideas with drawings and diagrams</p>
-            <button className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700">
-              Open Whiteboard
-            </button>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="text-center">
-            <div className="bg-purple-50 p-4 rounded-full w-16 h-16 mx-auto mb-4">
-              <svg className="w-8 h-8 text-purple-600 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Upload PDF</h3>
-            <p className="text-gray-600 text-sm mb-4">Manage and annotate PDF documents</p>
-            <button className="bg-purple-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-purple-700">
-              Upload PDF
-            </button>
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Note View Modal */}
       {selectedNote && (
@@ -264,8 +282,11 @@ const DashboardHome: React.FC = () => {
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">{selectedNote.title}</h2>
                 <p className="text-sm text-gray-600 mt-1">
-                  By: {selectedNote.authorName} | 
-                  Created: {new Date(selectedNote.createdAt).toLocaleDateString()} {new Date(selectedNote.createdAt).toLocaleTimeString()}
+                  {selectedNote.copiedFromStaffId ? (
+                    <>Saved from: {selectedNote.copiedFromStaffName} | Saved: {new Date(selectedNote.createdAt).toLocaleDateString()}</>
+                  ) : (
+                    <>By: {selectedNote.createdByName} | Created: {new Date(selectedNote.createdAt).toLocaleDateString()} {new Date(selectedNote.createdAt).toLocaleTimeString()}</>
+                  )}
                   {selectedNote.updatedAt && selectedNote.updatedAt !== selectedNote.createdAt && (
                     <span> | Last Updated: {new Date(selectedNote.updatedAt).toLocaleDateString()} {new Date(selectedNote.updatedAt).toLocaleTimeString()}</span>
                   )}
@@ -296,9 +317,14 @@ const DashboardHome: React.FC = () => {
                     ))}
                   </div>
                 )}
-                {selectedNote.isShared && (
+                {selectedNote.shared && user?.role === 'staff' && (
                   <span className="inline-block bg-green-100 text-green-800 text-sm px-3 py-1 rounded-full mb-4">
                     📤 Shared Note
+                  </span>
+                )}
+                {selectedNote.copiedFromStaffId && (
+                  <span className="inline-block bg-blue-100 text-blue-800 text-sm px-3 py-1 rounded-full mb-4">
+                    📥 Saved from Teacher
                   </span>
                 )}
               </div>

@@ -18,11 +18,13 @@ export interface Note {
   title: string;
   content: string;
   tags: string[];
-  author: string;
-  authorName: string;
-  teacherCode?: string;
-  isShared: boolean;
-  sharedWith?: string[];
+  createdById: string;
+  createdByRole: string;
+  createdByName: string;
+  shared: boolean;
+  copiedFromStaffId?: string;
+  copiedFromStaffName?: string;
+  originalNoteId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -68,6 +70,8 @@ export interface AuthState {
 
 export interface NotesState {
   notes: Note[];
+  searchResults: Note[]; // Temporary search results
+  currentStaffInfo: any; // Info about currently searched staff
   isLoading: boolean;
   error: string | null;
   searchQuery: string;

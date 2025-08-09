@@ -58,7 +58,7 @@ app.get('/api', (req, res) => {
   });
 });
 
-// In-memory user storage for demo (replace with MongoDB in production)
+// In-memory storage for demo (replace with MongoDB in production)
 const users: any[] = [];
 let userIdCounter = 1;
 
@@ -248,40 +248,166 @@ const getUserFromToken = (authHeader: string) => {
   return users.find(u => u._id === userId);
 };
 
-// Notes endpoints
-app.get('/api/notes', (req, res) => {
+// Simple endpoint: GET /api/notes/{staffId}
+// This matches exactly the pseudocode you provided
+app.get('/api/notes/:staffId', (req, res) => {
+  try {
+    // 1. Get the staffId from the URL (e.g., "Staff123")
+    const staffId = req.params.staffId;
+    
+    // 2. Find all notes in the database where the 'AuthorID' matches the staffId
+    // In our case, we use registrationNumber as the staffId and createdById as AuthorID
+    
+    // First, find the staff member by their registration number (staffId)
+    const staffMember = users.find(u => u.role === 'staff' && u.registrationNumber === staffId);
+    
+    if (!staffMember) {
+      // If staff member doesn't exist, return empty array (no notes found)
+      return res.json([]);
+    }
+    
+    // Find all notes where AuthorID (createdById) matches the staff member's ID
+    const staffNotes = notes.filter(note => note.createdById === staffMember._id);
+    
+    // 3. Return the found notes as JSON data
+    // If no notes are found, this will correctly return an empty list: []
+    res.json(staffNotes);
+  } catch (error) {
+    // Return empty array on error to match expected behavior
+    res.json([]);
+  }
+});
+
+// Get user's own notes (for dashboard and notepad)
+app.get('/api/notes/my', (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization || '');
     if (!user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
     
-    let userNotes = [];
-    
-    if (user.role === 'student') {
-      // Get student's own notes
-      userNotes = notes.filter(note => note.author === user._id);
-      
-      // Only get shared notes from connected teachers if student has actively connected to teachers
-      if (user.connectedTeachers && user.connectedTeachers.length > 0) {
-        const connectedTeacherIds = users
-          .filter(u => u.role === 'staff' && user.connectedTeachers.includes(u.teacherCode))
-          .map(u => u._id);
-        
-        const sharedNotes = notes.filter(note => 
-          connectedTeacherIds.includes(note.author) && note.isShared
-        );
-        
-        userNotes = [...userNotes, ...sharedNotes];
-      }
-    } else {
-      // For staff, get their own notes
-      userNotes = notes.filter(note => note.author === user._id);
-    }
+    // Get only notes created by this user
+    const userNotes = notes.filter(note => note.createdById === user._id);
     
     res.json({ notes: userNotes });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch notes', details: error });
+  }
+});
+
+// Search notes by teacher's registration number (for students only)
+app.get('/api/notes/search/:staffId', (req, res) => {
+  try {
+    const user = getUserFromToken(req.headers.authorization || '');
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    if (user.role !== 'student') {
+      return res.status(403).json({ error: 'Only students can search for teacher notes' });
+    }
+
+    const { staffId } = req.params;
+    
+    // Find teacher by registration number (their unique ID)
+    const teacher = users.find(u => u.role === 'staff' && u.registrationNumber === staffId);
+    
+    if (!teacher) {
+      return res.status(404).json({ 
+        error: 'No notes found for this ID',
+        message: 'Teacher ID not found or teacher has no notes available'
+      });
+    }
+
+    // Get only SHARED notes from this teacher
+    const teacherNotes = notes.filter(note => 
+      note.createdById === teacher._id && 
+      note.createdByRole === 'staff' &&
+      note.shared === true // Only shared notes can be searched
+    );
+
+    if (teacherNotes.length === 0) {
+      return res.status(404).json({ 
+        error: 'No notes found for this ID',
+        message: 'This teacher has not shared any notes yet'
+      });
+    }
+
+    res.json({ 
+      notes: teacherNotes,
+      teacherInfo: {
+        name: teacher.registrationNumber,
+        subject: teacher.subject,
+        totalNotes: teacherNotes.length
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to search notes', details: error });
+  }
+});
+
+// Save a searched note to student's account
+app.post('/api/notes/save/:noteId', (req, res) => {
+  try {
+    const user = getUserFromToken(req.headers.authorization || '');
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    if (user.role !== 'student') {
+      return res.status(403).json({ error: 'Only students can save searched notes' });
+    }
+
+    const noteId = parseInt(req.params.noteId);
+    
+    // Find the original note
+    const originalNote = notes.find(note => note._id === noteId);
+    
+    if (!originalNote) {
+      return res.status(404).json({ error: 'Note not found' });
+    }
+
+    // Check if it's a shared staff note
+    if (originalNote.createdByRole !== 'staff' || !originalNote.shared) {
+      return res.status(403).json({ error: 'This note is not available for saving' });
+    }
+
+    // Check if student already saved this note
+    const alreadySaved = notes.find(note => 
+      note.createdById === user._id && 
+      note.copiedFromStaffId === originalNote.createdById &&
+      note.title === originalNote.title
+    );
+
+    if (alreadySaved) {
+      return res.status(400).json({ error: 'You have already saved this note' });
+    }
+
+    // Create a copy of the note for the student
+    const savedNote = {
+      _id: noteIdCounter++,
+      title: originalNote.title,
+      content: originalNote.content,
+      tags: originalNote.tags || [],
+      createdById: user._id, // Student becomes the owner of the copy
+      createdByRole: user.role,
+      createdByName: user.registrationNumber,
+      shared: false, // Student copies are private by default
+      copiedFromStaffId: originalNote.createdById, // Track original staff member
+      copiedFromStaffName: originalNote.createdByName,
+      originalNoteId: originalNote._id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    notes.push(savedNote);
+
+    res.status(201).json({
+      message: 'Note saved to your account successfully',
+      note: savedNote
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to save note', details: error });
   }
 });
 
@@ -292,17 +418,18 @@ app.post('/api/notes', (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
     
-    const { title, content, tags } = req.body;
+    const { title, content, tags, shared } = req.body;
     
     const newNote = {
       _id: noteIdCounter++,
       title,
       content,
       tags: tags || [],
-      author: user._id,
-      authorName: user.registrationNumber,
-      isShared: user.role === 'staff', // Staff notes are automatically shared
-      sharedWith: [],
+      createdById: user._id,
+      createdByRole: user.role,
+      createdByName: user.registrationNumber,
+      shared: user.role === 'staff' ? (shared !== undefined ? shared : false) : false, // Only staff can set shared flag
+      copiedFromStaffId: null, // For original notes, this is null
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -326,19 +453,21 @@ app.put('/api/notes/:id', (req, res) => {
     }
     
     const noteId = parseInt(req.params.id);
-    const noteIndex = notes.findIndex(note => note._id === noteId && note.author === user._id);
+    const noteIndex = notes.findIndex(note => note._id === noteId && note.createdById === user._id);
     
     if (noteIndex === -1) {
       return res.status(404).json({ error: 'Note not found or access denied' });
     }
     
-    const { title, content, tags } = req.body;
+    const { title, content, tags, shared } = req.body;
     
     notes[noteIndex] = {
       ...notes[noteIndex],
       title: title || notes[noteIndex].title,
       content: content || notes[noteIndex].content,
       tags: tags || notes[noteIndex].tags,
+      // Only staff can control sharing, students cannot share their copied notes
+      shared: user.role === 'staff' ? (shared !== undefined ? shared : notes[noteIndex].shared) : notes[noteIndex].shared,
       updatedAt: new Date().toISOString()
     };
     
@@ -359,7 +488,7 @@ app.delete('/api/notes/:id', (req, res) => {
     }
     
     const noteId = parseInt(req.params.id);
-    const noteIndex = notes.findIndex(note => note._id === noteId && note.author === user._id);
+    const noteIndex = notes.findIndex(note => note._id === noteId && note.createdById === user._id);
     
     if (noteIndex === -1) {
       return res.status(404).json({ error: 'Note not found or access denied' });

@@ -4,6 +4,8 @@ import api from '../services/api';
 
 const initialState: NotesState = {
   notes: [],
+  searchResults: [], // Temporary search results for staff notes
+  currentStaffInfo: null, // Info about currently searched staff
   isLoading: false,
   error: null,
   searchQuery: '',
@@ -14,14 +16,14 @@ const initialState: NotesState = {
 export const fetchNotes = createAsyncThunk(
   'notes/fetchNotes',
   async () => {
-    const response = await api.get('/notes');
+    const response = await api.get('/notes/my');
     return response.data.notes || response.data;
   }
 );
 
 export const createNote = createAsyncThunk(
   'notes/createNote',
-  async (noteData: { title: string; content: string; tags: string[]; isShared?: boolean }) => {
+  async (noteData: { title: string; content: string; tags: string[]; shared?: boolean }) => {
     const response = await api.post('/notes', noteData);
     return response.data.note || response.data;
   }
@@ -29,9 +31,25 @@ export const createNote = createAsyncThunk(
 
 export const updateNote = createAsyncThunk(
   'notes/updateNote',
-  async ({ id, ...noteData }: { id: string; title: string; content: string; tags: string[]; isShared?: boolean }) => {
+  async ({ id, ...noteData }: { id: string; title: string; content: string; tags: string[]; shared?: boolean }) => {
     const response = await api.put(`/notes/${id}`, noteData);
     return response.data.note || response.data;
+  }
+);
+
+export const searchStaffNotes = createAsyncThunk(
+  'notes/searchStaffNotes',
+  async (staffId: string) => {
+    const response = await api.get(`/notes/search/${staffId}`);
+    return response.data;
+  }
+);
+
+export const saveSearchedNote = createAsyncThunk(
+  'notes/saveSearchedNote',
+  async (noteId: string) => {
+    const response = await api.post(`/notes/save/${noteId}`);
+    return response.data.note;
   }
 );
 
@@ -65,6 +83,10 @@ const notesSlice = createSlice({
     },
     clearError: (state) => {
       state.error = null;
+    },
+    clearSearchResults: (state) => {
+      state.searchResults = [];
+      state.currentStaffInfo = null;
     },
   },
   extraReducers: (builder) => {
@@ -132,9 +154,38 @@ const notesSlice = createSlice({
       .addCase(searchNotes.rejected, (state, action) => {
         state.error = action.error.message || 'Failed to search notes';
         state.notes = []; // Ensure notes is always an array
+      })
+      // Search staff notes
+      .addCase(searchStaffNotes.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(searchStaffNotes.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.searchResults = action.payload.notes;
+        state.currentStaffInfo = action.payload.teacherInfo;
+      })
+      .addCase(searchStaffNotes.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.error.message || 'Failed to search notes';
+        state.searchResults = [];
+        state.currentStaffInfo = null;
+      })
+      // Save searched note
+      .addCase(saveSearchedNote.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(saveSearchedNote.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.notes.unshift(action.payload); // Add to user's permanent notes at the beginning
+      })
+      .addCase(saveSearchedNote.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.error.message || 'Failed to save note';
       });
   },
 });
 
-export const { setSearchQuery, setSelectedTags, clearError } = notesSlice.actions;
+export const { setSearchQuery, setSelectedTags, clearError, clearSearchResults } = notesSlice.actions;
 export default notesSlice.reducer;

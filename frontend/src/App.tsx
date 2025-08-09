@@ -16,6 +16,12 @@ import Whiteboard from './components/Whiteboard';
 import PDFManager from './components/PDFManager';
 import TeacherSearch from './pages/TeacherSearch';
 
+// Protected Route Component for Staff Only
+const StaffRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user } = useSelector((state: RootState) => state.auth);
+  return user?.role === 'staff' ? <>{children}</> : <Navigate to="/dashboard" replace />;
+};
+
 const AppRoutes: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { user, token } = useSelector((state: RootState) => state.auth);
@@ -32,9 +38,10 @@ const AppRoutes: React.FC = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/dashboard" element={<Dashboard />}>
         <Route index element={<DashboardHome />} />
-        <Route path="notes" element={<Notepad />} />
-        <Route path="whiteboard" element={<Whiteboard />} />
-        <Route path="pdf" element={<PDFManager />} />
+        {/* Staff-only routes */}
+        <Route path="notes" element={<StaffRoute><Notepad /></StaffRoute>} />
+        <Route path="whiteboard" element={<StaffRoute><Whiteboard /></StaffRoute>} />
+        <Route path="pdf" element={<StaffRoute><PDFManager /></StaffRoute>} />
       </Route>
       <Route path="/teacher-search" element={<TeacherSearch />} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
