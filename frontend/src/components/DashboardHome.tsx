@@ -1,12 +1,35 @@
-import React, { useState } from 'react';
-import { useSelector } from 'react-redux';
-import { RootState } from '../store';
+import React, { useState, useEffect } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState, AppDispatch } from '../store';
+import { fetchNotes } from '../store/notesSlice';
 import SimpleNotesSearch from './SimpleNotesSearch';
 
 const DashboardHome: React.FC = () => {
+  const dispatch = useDispatch<AppDispatch>();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { notes } = useSelector((state: RootState) => state.notes);
+  const { notes, isLoading } = useSelector((state: RootState) => state.notes);
   const [selectedNote, setSelectedNote] = useState<any>(null);
+
+  // Fetch user's notes when component mounts (staff only)
+  useEffect(() => {
+    if (user?.role === 'staff') {
+      dispatch(fetchNotes());
+    }
+  }, [dispatch, user]);
+
+  // Also refetch notes when the component comes into focus (when user returns to dashboard)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (user?.role === 'staff') {
+        dispatch(fetchNotes());
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [dispatch, user]);
 
   const handleNoteClick = (note: any) => {
     setSelectedNote(note);
@@ -14,6 +37,12 @@ const DashboardHome: React.FC = () => {
 
   const closeNoteView = () => {
     setSelectedNote(null);
+  };
+
+  const handleRefreshNotes = () => {
+    if (user?.role === 'staff') {
+      dispatch(fetchNotes());
+    }
   };
 
   const quickStats = [
@@ -157,66 +186,89 @@ const DashboardHome: React.FC = () => {
 
           {/* Recent Notes */}
           <div className="bg-white rounded-lg shadow-sm">
-            <div className="p-6 border-b border-gray-200">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
               <h2 className="text-lg font-semibold text-gray-900">Recent Notes</h2>
+              <button
+                onClick={handleRefreshNotes}
+                disabled={isLoading}
+                className="flex items-center px-3 py-1.5 text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <svg className={`w-4 h-4 mr-1 ${isLoading ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {isLoading ? 'Loading...' : 'Refresh'}
+              </button>
             </div>
             <div className="p-6">
-              {recentNotes.length === 0 ? (
+              {isLoading ? (
                 <div className="text-center py-8">
-                  <svg className="w-12 h-12 mx-auto text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                  </svg>
-                  <p className="text-gray-500 mt-2">No notes yet. Start by creating your first note!</p>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-gray-500 mt-2">Loading your notes...</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {recentNotes.map((note) => (
-                    <div 
-                      key={note._id} 
-                      className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors"
-                      onClick={() => handleNoteClick(note)}
-                    >
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <h3 className="font-medium text-gray-900 hover:text-blue-600">{note.title}</h3>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {note.copiedFromStaffId ? (
-                              <>Saved from: {note.copiedFromStaffName} | Saved: {new Date(note.createdAt).toLocaleDateString()}</>
-                            ) : (
-                              <>By: {note.createdByName} | Created: {new Date(note.createdAt).toLocaleDateString()} {new Date(note.createdAt).toLocaleTimeString()}</>
-                            )}
-                            {note.updatedAt && note.updatedAt !== note.createdAt && (
-                              <span> | Updated: {new Date(note.updatedAt).toLocaleDateString()} {new Date(note.updatedAt).toLocaleTimeString()}</span>
-                            )}
-                          </p>
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {note.tags?.slice(0, 3).map((tag) => (
-                              <span
-                                key={tag}
-                                className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full"
-                              >
-                                #{tag}
-                              </span>
-                            ))}
+                <>
+                  <div className="mb-4 text-sm text-gray-500">
+                    Total notes in store: {notes.length} | Recent notes shown: {recentNotes.length}
+                  </div>
+                  {recentNotes.length === 0 ? (
+                    <div className="text-center py-8">
+                      <svg className="w-12 h-12 mx-auto text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      <p className="text-gray-500 mt-2">No notes yet. Start by creating your first note!</p>
+                      <p className="text-gray-400 mt-1 text-sm">Notes count: {notes.length}</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {recentNotes.map((note) => (
+                        <div 
+                          key={note._id} 
+                          className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                          onClick={() => handleNoteClick(note)}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <h3 className="font-medium text-gray-900 hover:text-blue-600">{note.title}</h3>
+                              <p className="text-sm text-gray-600 mt-1">
+                                {note.copiedFromStaffId ? (
+                                  <>Saved from: {note.copiedFromStaffName} | Saved: {new Date(note.createdAt).toLocaleDateString()}</>
+                                ) : (
+                                  <>By: {note.createdByName} | Created: {new Date(note.createdAt).toLocaleDateString()} {new Date(note.createdAt).toLocaleTimeString()}</>
+                                )}
+                                {note.updatedAt && note.updatedAt !== note.createdAt && (
+                                  <span> | Updated: {new Date(note.updatedAt).toLocaleDateString()} {new Date(note.updatedAt).toLocaleTimeString()}</span>
+                                )}
+                              </p>
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {note.tags?.slice(0, 3).map((tag) => (
+                                  <span
+                                    key={tag}
+                                    className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full"
+                                  >
+                                    #{tag}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end space-y-1">
+                              {note.shared && user?.role === 'staff' && (
+                                <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+                                  Shared
+                                </span>
+                              )}
+                              {note.copiedFromStaffId && (
+                                <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+                                  From Teacher
+                                </span>
+                              )}
+                              <span className="text-xs text-gray-400">Click to view</span>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex flex-col items-end space-y-1">
-                          {note.shared && user?.role === 'staff' && (
-                            <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
-                              Shared
-                            </span>
-                          )}
-                          {note.copiedFromStaffId && (
-                            <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
-                              From Teacher
-                            </span>
-                          )}
-                          <span className="text-xs text-gray-400">Click to view</span>
-                        </div>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </div>
           </div>
