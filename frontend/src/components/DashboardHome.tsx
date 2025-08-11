@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import { useLocation } from 'react-router-dom';
 import { RootState, AppDispatch } from '../store';
 import { fetchNotes } from '../store/notesSlice';
 import SimpleNotesSearch from './SimpleNotesSearch';
 
 const DashboardHome: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
+  const location = useLocation();
   const { user } = useSelector((state: RootState) => state.auth);
   const { notes, isLoading } = useSelector((state: RootState) => state.notes);
   const [selectedNote, setSelectedNote] = useState<any>(null);
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
 
   // Fetch user's notes when component mounts (staff only)
   useEffect(() => {
@@ -16,6 +19,13 @@ const DashboardHome: React.FC = () => {
       dispatch(fetchNotes());
     }
   }, [dispatch, user]);
+
+  // Refetch notes when navigating to dashboard (when location changes to '/' or '/dashboard')
+  useEffect(() => {
+    if (user?.role === 'staff' && (location.pathname === '/' || location.pathname === '/dashboard')) {
+      dispatch(fetchNotes());
+    }
+  }, [dispatch, user, location.pathname]);
 
   // Also refetch notes when the component comes into focus (when user returns to dashboard)
   useEffect(() => {
@@ -39,9 +49,10 @@ const DashboardHome: React.FC = () => {
     setSelectedNote(null);
   };
 
-  const handleRefreshNotes = () => {
+  const handleRefreshNotes = async () => {
     if (user?.role === 'staff') {
-      dispatch(fetchNotes());
+      await dispatch(fetchNotes());
+      setLastFetchTime(Date.now());
     }
   };
 
@@ -207,8 +218,15 @@ const DashboardHome: React.FC = () => {
                 </div>
               ) : (
                 <>
-                  <div className="mb-4 text-sm text-gray-500">
-                    Total notes in store: {notes.length} | Recent notes shown: {recentNotes.length}
+                  <div className="mb-4 flex justify-between items-center">
+                    <div className="text-sm text-gray-500">
+                      Total notes in store: {notes.length} | Recent notes shown: {recentNotes.length}
+                    </div>
+                    {lastFetchTime > 0 && (
+                      <div className="text-xs text-green-600">
+                        Last updated: {new Date(lastFetchTime).toLocaleTimeString()}
+                      </div>
+                    )}
                   </div>
                   {recentNotes.length === 0 ? (
                     <div className="text-center py-8">
