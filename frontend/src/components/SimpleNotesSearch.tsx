@@ -24,7 +24,7 @@ const SimpleNotesSearch: React.FC = () => {
 
     try {
       // 3. Call the backend API with the entered Staff ID
-      const response = await fetch(`http://localhost:5000/api/notes/${staffId}`);
+      const response = await fetch(`http://localhost:5001/api/notes/${staffId}`);
       const fetchedNotes = await response.json();
 
       // 5. Display the new results

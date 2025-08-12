@@ -22,5 +22,9 @@
   },
   "include": [
     "src"
+  ],
+  "exclude": [
+    "src/sentry.ts",
+    "src/sentry.tsx"
   ]
 }

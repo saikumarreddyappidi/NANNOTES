@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NANNOTES Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .step { margin: 10px 0; padding: 10px; border: 1px solid #ccc; }
+        .success { background-color: #d4edda; }
+        .error { background-color: #f8d7da; }
+        button { padding: 8px 16px; margin: 5px; }
+        textarea { width: 100%; height: 100px; }
+        input { width: 300px; padding: 5px; }
+        .response { background: #f8f9fa; padding: 10px; margin: 5px 0; border-left: 3px solid #007bff; }
+    </style>
+</head>
+<body>
+    <h1>NANNOTES Debug Test</h1>
+    <p>This page will test the exact workflow: Register → Login → Create Note → Fetch Notes</p>
+
+    <div class="step">
+        <h3>Step 1: Register a Test User</h3>
+        <input type="text" id="regNumber" placeholder="Registration Number" value="STAFF001">
+        <input type="text" id="password" placeholder="Password" value="TestPass123!">
+        <select id="role">
+            <option value="staff">Staff</option>
+            <option value="student">Student</option>
+        </select>
+        <input type="text" id="subject" placeholder="Subject" value="Computer Science">
+        <button onclick="register()">Register</button>
+        <div id="registerResponse" class="response"></div>
+    </div>
+
+    <div class="step">
+        <h3>Step 2: Login</h3>
+        <button onclick="login()">Login with above credentials</button>
+        <div id="loginResponse" class="response"></div>
+    </div>
+
+    <div class="step">
+        <h3>Step 3: Create a Note</h3>
+        <input type="text" id="noteTitle" placeholder="Note Title" value="Test Note 1">
+        <textarea id="noteContent" placeholder="Note Content">This is a test note content to verify the save and fetch functionality.</textarea>
+        <label><input type="checkbox" id="shared"> Shared (Staff only)</label>
+        <button onclick="createNote()">Create Note</button>
+        <div id="createResponse" class="response"></div>
+    </div>
+
+    <div class="step">
+        <h3>Step 4: Fetch Notes</h3>
+        <button onclick="fetchNotes()">Fetch My Notes</button>
+        <div id="fetchResponse" class="response"></div>
+    </div>
+
+    <div class="step">
+        <h3>Step 5: Health Check</h3>
+        <button onclick="healthCheck()">Check API Health</button>
+        <div id="healthResponse" class="response"></div>
+    </div>
+
+    <script>
+        let authToken = null;
+        const API_BASE = 'http://localhost:5003/api';
+
+        async function makeRequest(method, url, data = null) {
+            const options = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            };
+
+            if (authToken) {
+                options.headers['Authorization'] = `Bearer ${authToken}`;
+            }
+
+            if (data) {
+                options.body = JSON.stringify(data);
+            }
+
+            try {
+                const response = await fetch(API_BASE + url, options);
+                const result = await response.json();
+                return { success: response.ok, status: response.status, data: result };
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
+        }
+
+        async function register() {
+            const data = {
+                registrationNumber: document.getElementById('regNumber').value,
+                password: document.getElementById('password').value,
+                role: document.getElementById('role').value,
+                subject: document.getElementById('subject').value,
+                year: '2024',
+                semester: '1'
+            };
+
+            const result = await makeRequest('POST', '/auth/register', data);
+            document.getElementById('registerResponse').innerHTML = 
+                `<strong>Register Result:</strong><br><pre>${JSON.stringify(result, null, 2)}</pre>`;
+            
+            if (result.success && result.data.token) {
+                authToken = result.data.token;
+                console.log('🔑 Auth token set:', authToken);
+            }
+        }
+
+        async function login() {
+            const data = {
+                registrationNumber: document.getElementById('regNumber').value,
+                password: document.getElementById('password').value
+            };
+
+            const result = await makeRequest('POST', '/auth/login', data);
+            document.getElementById('loginResponse').innerHTML = 
+                `<strong>Login Result:</strong><br><pre>${JSON.stringify(result, null, 2)}</pre>`;
+            
+            if (result.success && result.data.token) {
+                authToken = result.data.token;
+                console.log('🔑 Auth token updated:', authToken);
+            }
+        }
+
+        async function createNote() {
+            const data = {
+                title: document.getElementById('noteTitle').value,
+                content: document.getElementById('noteContent').value,
+                shared: document.getElementById('shared').checked,
+                tags: ['test', 'debug']
+            };
+
+            const result = await makeRequest('POST', '/notes', data);
+            document.getElementById('createResponse').innerHTML = 
+                `<strong>Create Note Result:</strong><br><pre>${JSON.stringify(result, null, 2)}</pre>`;
+        }
+
+        async function fetchNotes() {
+            const result = await makeRequest('GET', '/notes/my');
+            document.getElementById('fetchResponse').innerHTML = 
+                `<strong>Fetch Notes Result:</strong><br><pre>${JSON.stringify(result, null, 2)}</pre>`;
+        }
+
+        async function healthCheck() {
+            const result = await makeRequest('GET', '/health');
+            document.getElementById('healthResponse').innerHTML = 
+                `<strong>Health Check Result:</strong><br><pre>${JSON.stringify(result, null, 2)}</pre>`;
+        }
+
+        // Auto-run health check on load
+        window.onload = function() {
+            healthCheck();
+        };
+    </script>
+</body>
+</html>

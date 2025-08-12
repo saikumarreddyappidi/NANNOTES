@@ -16,6 +16,7 @@ const DashboardHome: React.FC = () => {
   // Fetch user's notes when component mounts (staff only)
   useEffect(() => {
     if (user?.role === 'staff') {
+      console.log('📱 Fetching notes on component mount...');
       dispatch(fetchNotes());
     }
   }, [dispatch, user]);
@@ -23,6 +24,7 @@ const DashboardHome: React.FC = () => {
   // Refetch notes when navigating to dashboard (when location changes to '/' or '/dashboard')
   useEffect(() => {
     if (user?.role === 'staff' && (location.pathname === '/' || location.pathname === '/dashboard')) {
+      console.log('🧭 Fetching notes on location change:', location.pathname);
       dispatch(fetchNotes());
     }
   }, [dispatch, user, location.pathname]);
@@ -31,6 +33,7 @@ const DashboardHome: React.FC = () => {
   useEffect(() => {
     const handleFocus = () => {
       if (user?.role === 'staff') {
+        console.log('🪟 Fetching notes on window focus...');
         dispatch(fetchNotes());
       }
     };
@@ -51,8 +54,14 @@ const DashboardHome: React.FC = () => {
 
   const handleRefreshNotes = async () => {
     if (user?.role === 'staff') {
-      await dispatch(fetchNotes());
-      setLastFetchTime(Date.now());
+      console.log('🔄 Refreshing notes manually...');
+      try {
+        await dispatch(fetchNotes());
+        setLastFetchTime(Date.now());
+        console.log('✅ Notes refreshed successfully. Current notes count:', notes.length);
+      } catch (error) {
+        console.error('❌ Error refreshing notes:', error);
+      }
     }
   };
 

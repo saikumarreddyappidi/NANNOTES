@@ -3,12 +3,16 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
+// import { initSentry, setupSentryErrorHandler } from './sentry';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5002;
+
+// Initialize Sentry first (commented out until packages installed)
+// initSentry(app);
 
 // Security middleware
 app.use(helmet());
@@ -20,7 +24,17 @@ app.use(cors({
         /^https:\/\/.*\.railway\.app$/,
         /^https:\/\/.*\.vercel\.app$/
       ]
-    : ['http://localhost:3000', 'http://localhost:3001'],
+    : [
+        'http://localhost:3000', 
+        'http://localhost:3001', 
+        'http://localhost:3002', 
+        'http://localhost:3003',
+        'http://localhost:60464',
+        'http://localhost:60700',
+        'http://localhost:59334',
+        'http://localhost:3004',
+        'http://localhost:3005'
+      ],
   credentials: true
 }));
 
@@ -281,16 +295,27 @@ app.get('/api/notes/:staffId', (req, res) => {
 // Get user's own notes (for dashboard and notepad)
 app.get('/api/notes/my', (req, res) => {
   try {
+    console.log('🔍 GET /api/notes/my called');
+    console.log('🔑 Authorization header:', req.headers.authorization);
+    
     const user = getUserFromToken(req.headers.authorization || '');
     if (!user) {
+      console.log('❌ No user found from token');
       return res.status(401).json({ error: 'Unauthorized' });
     }
+    
+    console.log('👤 User found:', { id: user._id, name: user.registrationNumber, role: user.role });
     
     // Get only notes created by this user
     const userNotes = notes.filter(note => note.createdById === user._id);
     
+    console.log('📝 Total notes in database:', notes.length);
+    console.log('👤 User notes found:', userNotes.length);
+    console.log('📋 User notes:', userNotes);
+    
     res.json({ notes: userNotes });
   } catch (error) {
+    console.error('❌ Error in GET /api/notes/my:', error);
     res.status(500).json({ error: 'Failed to fetch notes', details: error });
   }
 });
@@ -413,10 +438,15 @@ app.post('/api/notes/save/:noteId', (req, res) => {
 
 app.post('/api/notes', (req, res) => {
   try {
+    console.log('📝 POST /api/notes called with body:', req.body);
+    
     const user = getUserFromToken(req.headers.authorization || '');
     if (!user) {
+      console.log('❌ No user found from token');
       return res.status(401).json({ error: 'Unauthorized' });
     }
+    
+    console.log('👤 User creating note:', { id: user._id, name: user.registrationNumber, role: user.role });
     
     const { title, content, tags, shared } = req.body;
     
@@ -434,13 +464,19 @@ app.post('/api/notes', (req, res) => {
       updatedAt: new Date().toISOString()
     };
     
+    console.log('✨ Creating new note:', newNote);
+    
     notes.push(newNote);
+    
+    console.log('📋 Total notes in database after creation:', notes.length);
+    console.log('📋 All notes:', notes.map(n => ({ id: n._id, title: n.title, createdById: n.createdById })));
     
     res.status(201).json({ 
       message: 'Note created successfully',
       note: newNote 
     });
   } catch (error) {
+    console.error('❌ Error creating note:', error);
     res.status(500).json({ error: 'Failed to create note', details: error });
   }
 });
@@ -716,6 +752,9 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
     message: err.message 
   });
 });
+
+// Setup Sentry error handler (commented out until packages installed)
+// setupSentryErrorHandler(app);
 
 // 404 handler
 app.use('*', (req, res) => {

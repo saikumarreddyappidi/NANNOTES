@@ -13,6 +13,8 @@
     "test": "jest"
   },
   "dependencies": {
+    "@sentry/node": "^7.120.4",
+    "@sentry/tracing": "^7.120.4",
     "aws-sdk": "^2.1498.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

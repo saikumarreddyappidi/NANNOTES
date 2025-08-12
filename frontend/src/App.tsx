@@ -5,6 +5,7 @@ import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { store, RootState, AppDispatch } from './store';
 import { getCurrentUser } from './store/authSlice';
+import { SentryErrorBoundary } from './sentryStub';
 
 // Components
 import Login from './components/Login';
@@ -52,22 +53,24 @@ const AppRoutes: React.FC = () => {
 const App: React.FC = () => {
   return (
     <Provider store={store}>
-      <Router>
-        <div className="App">
-          <AppRoutes />
-          <ToastContainer
-            position="top-right"
-            autoClose={3000}
-            hideProgressBar={false}
-            newestOnTop={false}
-            closeOnClick
-            rtl={false}
-            pauseOnFocusLoss
-            draggable
-            pauseOnHover
-          />
-        </div>
-      </Router>
+      <SentryErrorBoundary>
+        <Router>
+          <div className="App">
+            <AppRoutes />
+            <ToastContainer
+              position="top-right"
+              autoClose={3000}
+              hideProgressBar={false}
+              newestOnTop={false}
+              closeOnClick
+              rtl={false}
+              pauseOnFocusLoss
+              draggable
+              pauseOnHover
+            />
+          </div>
+        </Router>
+      </SentryErrorBoundary>
     </Provider>
   );
 };

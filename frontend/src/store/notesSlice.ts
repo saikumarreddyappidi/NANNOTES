@@ -15,17 +15,41 @@ const initialState: NotesState = {
 // Async thunks
 export const fetchNotes = createAsyncThunk(
   'notes/fetchNotes',
-  async () => {
-    const response = await api.get('/notes/my');
-    return response.data.notes || response.data;
+  async (_, { rejectWithValue }) => {
+    try {
+      console.log('🚀 Starting fetchNotes API call...');
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        console.error('❌ No token found in localStorage');
+        throw new Error('No token found');
+      }
+      
+      console.log('🔑 Token found:', token.substring(0, 20) + '...');
+      console.log('🌐 Making API request to: /notes');
+      
+      const response = await api.get('/notes');
+      console.log('✅ API response received:', response.data);
+      console.log('📋 Notes from API:', response.data);
+      console.log('📊 Notes count:', response.data?.length || 'undefined');
+      
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error in fetchNotes:', error);
+      console.error('❌ Error response:', error.response?.data);
+      console.error('❌ Error status:', error.response?.status);
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch notes');
+    }
   }
 );
 
 export const createNote = createAsyncThunk(
   'notes/createNote',
   async (noteData: { title: string; content: string; tags: string[]; shared?: boolean }) => {
+    console.log('📝 Creating note with data:', noteData);
     const response = await api.post('/notes', noteData);
-    return response.data.note || response.data;
+    console.log('✅ Note created, response:', response.data);
+    return response.data;
   }
 );
 
@@ -39,17 +63,33 @@ export const updateNote = createAsyncThunk(
 
 export const searchStaffNotes = createAsyncThunk(
   'notes/searchStaffNotes',
-  async (staffId: string) => {
-    const response = await api.get(`/notes/search/${staffId}`);
-    return response.data;
+  async (staffId: string, { rejectWithValue }) => {
+    try {
+      console.log('🔍 Searching for staff notes, staffId:', staffId);
+      const response = await api.get(`/notes/search/${staffId}`);
+      console.log('✅ Staff search response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Staff search error:', error);
+      console.error('❌ Error response:', error.response?.data);
+      return rejectWithValue(error.response?.data?.message || 'Failed to search staff notes');
+    }
   }
 );
 
 export const saveSearchedNote = createAsyncThunk(
   'notes/saveSearchedNote',
-  async (noteId: string) => {
-    const response = await api.post(`/notes/save/${noteId}`);
-    return response.data.note;
+  async (noteId: string, { rejectWithValue }) => {
+    try {
+      console.log('💾 Saving searched note, noteId:', noteId);
+      const response = await api.post(`/notes/save/${noteId}`);
+      console.log('✅ Note saved response:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Save note error:', error);
+      console.error('❌ Error response:', error.response?.data);
+      return rejectWithValue(error.response?.data?.message || 'Failed to save note');
+    }
   }
 );
 
@@ -99,11 +139,13 @@ const notesSlice = createSlice({
       .addCase(fetchNotes.fulfilled, (state, action) => {
         state.isLoading = false;
         state.notes = action.payload;
+        console.log('📋 Notes state updated in Redux:', action.payload);
       })
       .addCase(fetchNotes.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.error.message || 'Failed to fetch notes';
         state.notes = []; // Ensure notes is always an array
+        console.error('❌ fetchNotes rejected:', action.error.message);
       })
       // Create note
       .addCase(createNote.pending, (state) => {
