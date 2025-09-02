@@ -5,7 +5,7 @@ try { require('dotenv').config({ path: require('path').join(__dirname, '.env') }
 let AWS = null;
 try { AWS = require('aws-sdk'); } catch (_) { AWS = null; }
 const app = express();
-const PORT = 5003;
+const PORT = parseInt(process.env.PORT, 10) || 5003;
 
 // --- Error Handling ---
 process.on('uncaughtException', (err) => {
@@ -183,19 +183,33 @@ app.get('/api/auth/me', (req, res) => {
 
 // Student connects to staff by staff registrationNumber
 app.post('/api/auth/connect-staff', (req, res) => {
-    const { studentId, staffId } = req.body; // staffId is registrationNumber
-    const student = users.find(u => u.id === studentId && u.role === 'student');
-    const staff = users.find(u => u.registrationNumber === staffId && u.role === 'staff');
-    
-    if (!student || !staff) {
-        return res.status(404).json({ message: 'Student or Staff not found' });
-    }
-    if (!student.connectedStaff) student.connectedStaff = [];
-    if (!student.connectedStaff.includes(staff.registrationNumber)) {
-        student.connectedStaff.push(staff.registrationNumber);
-    }
-    console.log(`Student ${student.registrationNumber} connected to staff ${staff.registrationNumber}`);
-    res.json({ message: 'Connected to staff successfully', staffId: staff.registrationNumber });
+  // Prefer auth token; fallback to body.studentId for older clients
+  const authedUser = getUserFromToken(req.headers.authorization);
+  const { studentId, staffId } = req.body || {}; // staffId is staff registrationNumber
+
+  let student = null;
+  if (authedUser && authedUser.role === 'student') {
+    student = authedUser;
+  } else if (studentId) {
+    student = users.find(u => u.id === studentId && u.role === 'student') || null;
+  }
+
+  const staff = users.find(u => u.registrationNumber === staffId && u.role === 'staff') || null;
+
+  if (!student) return res.status(404).json({ message: 'Student not found' });
+  if (!staff) return res.status(404).json({ message: 'Staff not found' });
+
+  if (!student.connectedStaff) student.connectedStaff = [];
+  if (!student.connectedStaff.includes(staff.registrationNumber)) {
+    student.connectedStaff.push(staff.registrationNumber);
+  }
+  console.log(`Student ${student.registrationNumber} connected to staff ${staff.registrationNumber}`);
+  res.json({
+    message: 'Connected to staff successfully',
+    staffId: staff.registrationNumber,
+    staffName: staff.registrationNumber,
+    staffSubject: staff.subject || 'General',
+  });
 });
 
 // Staff management routes for students
@@ -378,10 +392,10 @@ app.post('/api/notes/save/:noteId', (req, res) => {
       createdById: user.id,
       createdByName: user.registrationNumber,
       createdByRole: user.role,
-  // Preserve origin metadata for display in student's notepad
-  originStaffId: source.createdByName,
-  originStaffSubject: source.createdBySubject,
-  originNoteId: source._id,
+      // Preserve origin metadata for display in student's notepad
+      originStaffId: source.createdByName,
+      originStaffSubject: source.createdBySubject || 'General',
+      originNoteId: source._id,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
