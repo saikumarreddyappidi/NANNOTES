@@ -5,7 +5,7 @@ import api from '../services/api';
 
 const TeacherConnection: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
-  const [teacherCode, setTeacherCode] = useState('');
+  const [staffId, setStaffId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'success' | 'error' | ''>('');
@@ -13,8 +13,8 @@ const TeacherConnection: React.FC = () => {
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!teacherCode.trim()) {
-      setMessage('Please enter a teacher code');
+    if (!staffId.trim()) {
+      setMessage('Please enter a staff ID');
       setMessageType('error');
       return;
     }
@@ -23,20 +23,20 @@ const TeacherConnection: React.FC = () => {
     setMessage('');
 
     try {
-      const response = await api.post('/auth/connect-teacher', {
-        teacherCode: teacherCode.trim()
+      const response = await api.post('/auth/connect-staff', {
+        staffId: staffId.trim()
       });
 
-      setMessage(`Successfully connected to ${response.data.teacherName} (${response.data.teacherSubject})`);
+      setMessage(`Successfully connected to ${response.data.staffName} (${response.data.staffSubject})`);
       setMessageType('success');
-      setTeacherCode('');
+      setStaffId('');
       
       // Optionally refresh the page or update user state
       setTimeout(() => {
         window.location.reload();
       }, 2000);
     } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to connect to teacher';
+      const errorMessage = error.response?.data?.error || 'Failed to connect to staff';
       setMessage(errorMessage);
       setMessageType('error');
     } finally {
@@ -55,24 +55,24 @@ const TeacherConnection: React.FC = () => {
         <svg className="w-8 h-8 text-blue-600 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
         </svg>
-        <h2 className="text-xl font-semibold text-gray-900">Connect to Teacher</h2>
+        <h2 className="text-xl font-semibold text-gray-900">Connect to Staff</h2>
       </div>
       
       <p className="text-gray-600 mb-4">
-        Enter your teacher's code to access their shared notes, whiteboards, and PDF files.
+        Enter your teacher's ID to access their shared notes, whiteboards, and PDF files.
       </p>
 
       <form onSubmit={handleConnect} className="space-y-4">
         <div>
-          <label htmlFor="teacherCode" className="block text-sm font-medium text-gray-700 mb-1">
-            Teacher Code
+          <label htmlFor="staffId" className="block text-sm font-medium text-gray-700 mb-1">
+            Staff ID
           </label>
           <input
             type="text"
-            id="teacherCode"
-            value={teacherCode}
-            onChange={(e) => setTeacherCode(e.target.value.toUpperCase())}
-            placeholder="Enter teacher code (e.g., TC12345678)"
+            id="staffId"
+            value={staffId}
+            onChange={(e) => setStaffId(e.target.value)}
+            placeholder="Enter staff ID (e.g., S12345)"
             className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             disabled={isLoading}
           />
@@ -83,7 +83,7 @@ const TeacherConnection: React.FC = () => {
           disabled={isLoading}
           className="bg-blue-600 text-white px-6 py-2 rounded-md font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isLoading ? 'Connecting...' : 'Connect to Teacher'}
+          {isLoading ? 'Connecting...' : 'Connect to Staff'}
         </button>
       </form>
 
@@ -97,13 +97,13 @@ const TeacherConnection: React.FC = () => {
         </div>
       )}
 
-      {user?.connectedTeachers && user.connectedTeachers.length > 0 && (
+      {user?.connectedStaff && user.connectedStaff.length > 0 && (
         <div className="mt-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Connected Teachers</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Connected Staff</h3>
           <div className="space-y-2">
-            {user.connectedTeachers.map((code: string, index: number) => (
+            {user.connectedStaff.map((id: string, index: number) => (
               <div key={index} className="flex items-center justify-between bg-gray-50 px-4 py-2 rounded-md">
-                <span className="font-mono text-sm text-gray-700">{code}</span>
+                <span className="font-mono text-sm text-gray-700">{id}</span>
                 <span className="text-xs text-green-600 font-medium">Connected</span>
               </div>
             ))}

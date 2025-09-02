@@ -18,7 +18,6 @@ const Register: React.FC = () => {
     semester: '',
     course: '',
     subject: '',
-    teacherCode: '', // Optional field for students to connect to teachers
   });
 
   const [passwordErrors, setPasswordErrors] = useState<string[]>([]);
@@ -59,14 +58,6 @@ const Register: React.FC = () => {
     if (formData.role === 'staff') {
       if (!formData.registrationNumber.trim()) {
         alert('Staff ID is required for staff registration');
-        return;
-      }
-      if (!formData.teacherCode.trim()) {
-        alert('Teacher code is required for staff registration');
-        return;
-      }
-      if (formData.teacherCode.length < 4) {
-        alert('Teacher code must be at least 4 characters long');
         return;
       }
       if (!formData.subject.trim()) {
@@ -308,25 +299,6 @@ const Register: React.FC = () => {
                       placeholder="e.g., Mathematics"
                     />
                   </div>
-                  <div>
-                    <label htmlFor="teacherCode" className="block text-sm font-medium text-gray-700 mb-2">
-                      Teacher Code <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      id="teacherCode"
-                      name="teacherCode"
-                      type="text"
-                      required
-                      value={formData.teacherCode}
-                      onChange={handleChange}
-                      className="block w-full px-2 py-2 text-base bg-transparent border-0 border-b-2 border-blue-300 focus:outline-none focus:border-blue-500 transition duration-200"
-                      placeholder="Create your unique teacher code (e.g., MATH2024A)"
-                      maxLength={20}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Create a unique code that students will use to access your shared notes. Make it memorable and related to your subject.
-                    </p>
-                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label htmlFor="year" className="block text-sm font-medium text-gray-700 mb-2">
@@ -370,11 +342,10 @@ const Register: React.FC = () => {
                       <svg className="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <h4 className="text-sm font-medium text-blue-900">Teacher Code</h4>
+                      <h4 className="text-sm font-medium text-blue-900">Staff ID</h4>
                     </div>
                     <p className="text-xs text-blue-700">
-                      Your teacher code will be used by students to access your shared notes. 
-                      Choose a memorable code that represents your subject and class.
+                      Your Staff ID will be used by students to access your shared notes.
                     </p>
                   </div>
                 </>

@@ -15,7 +15,8 @@ import DashboardHome from './components/DashboardHome';
 import Notepad from './components/Notepad';
 import Whiteboard from './components/Whiteboard';
 import PDFManager from './components/PDFManager';
-import TeacherSearch from './pages/TeacherSearch';
+import StaffSearch from './pages/StaffSearch';
+import FileViewerPage from './pages/FileViewerPage';
 
 // Protected Route Component for Staff Only
 const StaffRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -39,12 +40,13 @@ const AppRoutes: React.FC = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/dashboard" element={<Dashboard />}>
         <Route index element={<DashboardHome />} />
-        {/* Staff-only routes */}
-        <Route path="notes" element={<StaffRoute><Notepad /></StaffRoute>} />
-        <Route path="whiteboard" element={<StaffRoute><Whiteboard /></StaffRoute>} />
-        <Route path="pdf" element={<StaffRoute><PDFManager /></StaffRoute>} />
+  {/* Notes accessible to both roles */}
+  <Route path="notes" element={<Notepad />} />
+  <Route path="whiteboard" element={<Whiteboard />} />
+  <Route path="pdf" element={<PDFManager />} />
       </Route>
-      <Route path="/teacher-search" element={<TeacherSearch />} />
+      <Route path="/staff-search" element={<StaffSearch />} />
+  <Route path="/file/:id/view" element={<FileViewerPage />} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );

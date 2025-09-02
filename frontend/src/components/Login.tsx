@@ -68,7 +68,7 @@ const Login: React.FC = () => {
             <form className="space-y-6" onSubmit={handleSubmit}>
               <div>
                 <label htmlFor="registrationNumber" className="block text-sm font-medium text-gray-700 mb-3">
-                  Registration Number / Teacher Code
+                  Registration Number
                 </label>
                 <input
                   id="registrationNumber"
@@ -78,7 +78,7 @@ const Login: React.FC = () => {
                   value={formData.registrationNumber}
                   onChange={handleChange}
                   className="block w-full px-2 py-3 text-base bg-transparent border-0 border-b-2 border-blue-300 focus:outline-none focus:border-blue-500 transition duration-200"
-                  placeholder="Enter your registration number or teacher code"
+                  placeholder="Enter your registration number"
                 />
               </div>
 

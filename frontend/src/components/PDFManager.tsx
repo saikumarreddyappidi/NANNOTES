@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 import api from '../services/api';
 
 const PDFManager: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
+  const navigate = useNavigate();
   const [pdfs, setPdfs] = useState<any[]>([]);
   const [selectedPDF, setSelectedPDF] = useState<any>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -38,8 +40,14 @@ const PDFManager: React.FC = () => {
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || file.type !== 'application/pdf') {
-      alert('Please select a valid PDF file');
+    if (!file) return;
+    const allowed = [
+      'application/pdf',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    ];
+    if (!allowed.includes(file.type)) {
+      alert('Please select a PDF or PowerPoint file (.pdf, .ppt, .pptx)');
       return;
     }
 
@@ -59,6 +67,8 @@ const PDFManager: React.FC = () => {
           });
 
           setPdfs(prev => [response.data, ...prev]);
+          // Auto-select and open the newly uploaded file
+          setSelectedPDF(response.data);
           setIsShared(false);
           alert('PDF uploaded successfully!');
         } catch (error) {
@@ -83,10 +93,61 @@ const PDFManager: React.FC = () => {
   };
 
   const handleViewPDF = (pdf: any) => {
-    // Open PDF in new tab for better viewing
-    const newWindow = window.open(pdf.fileUrl, '_blank');
-    if (!newWindow) {
-      alert('Please allow popups for this site to view PDFs');
+    // For PPT/PPTX prefer opening the full viewer in a new tab
+    const isPpt = typeof pdf?.filename === 'string' && /\.(ppt|pptx)$/i.test(pdf.filename);
+    if (isPpt) {
+      const url = `/file/${pdf.id}/view`;
+      const abs = `${window.location.origin}${url}`;
+      const win = window.open(abs, '_blank');
+      if (!win) alert('Please allow popups to open the viewer');
+      return;
+    }
+    // Inline for PDFs
+    setSelectedPDF(pdf);
+  };
+
+  const openInNewTab = (pdf: any) => {
+    try {
+      const url: string = pdf.fileUrl || pdf.fileData;
+      if (!url) {
+        alert('No file URL available to open');
+        return;
+      }
+      // If PPT/PPTX and we have a public URL, use Office Web Viewer
+      const isPpt = typeof pdf?.filename === 'string' && /\.(ppt|pptx)$/i.test(pdf.filename);
+      if (isPpt && /^https?:\/\//i.test(url)) {
+        const ov = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
+        const win = window.open(ov, '_blank');
+        if (!win) alert('Please allow popups for this site');
+        return;
+      }
+      if (/^data:/i.test(url)) {
+        // Convert data URL to Blob for better browser handling, esp. PPT/PPTX
+        const match = url.match(/^data:(.*?);base64,(.*)$/);
+        if (!match) {
+          const win = window.open(url, '_blank');
+          if (!win) alert('Please allow popups for this site');
+          return;
+        }
+        const mime = match[1] || 'application/octet-stream';
+        const b64 = match[2];
+        const byteChars = atob(b64);
+        const byteNumbers = new Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: mime });
+        const objectUrl = URL.createObjectURL(blob);
+        const win = window.open(objectUrl, '_blank');
+        if (!win) alert('Please allow popups for this site');
+        // Optional: revoke later
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+        return;
+      }
+      const win = window.open(url, '_blank');
+      if (!win) alert('Please allow popups for this site');
+    } catch (e) {
+      console.error('Open in new tab failed:', e);
+      alert('Failed to open file in a new tab');
     }
   };
 
@@ -279,13 +340,13 @@ const PDFManager: React.FC = () => {
       <div className={`${isFullscreen ? 'hidden' : 'w-1/3'} bg-white border-r border-gray-200 flex flex-col`}>
         <div className="p-4 border-b border-gray-200">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-medium text-gray-900">PDF Files</h3>
+            <h3 className="text-lg font-medium text-gray-900">Files (PDF / PowerPoint)</h3>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
               className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50"
             >
-              {isUploading ? 'Uploading...' : '+ Upload PDF'}
+              {isUploading ? 'Uploading...' : '+ Upload File'}
             </button>
           </div>
           
@@ -299,7 +360,7 @@ const PDFManager: React.FC = () => {
                 className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
               />
               <label htmlFor="sharePDF" className="text-sm text-gray-700">
-                Share uploaded PDFs with students (using teacher code: {user.teacherCode})
+                Share uploaded files with students (using your Staff ID)
               </label>
             </div>
           )}
@@ -307,7 +368,7 @@ const PDFManager: React.FC = () => {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf"
+            accept=".pdf,.ppt,.pptx"
             onChange={handleFileUpload}
             className="hidden"
           />
@@ -434,6 +495,17 @@ const PDFManager: React.FC = () => {
                   >
                     {isLoading ? 'Saving...' : `💾 Save (${annotations.length})`}
                   </button>
+                  <button
+                    onClick={() => {
+                      if (!selectedPDF) return;
+                      const url = `/file/${selectedPDF.id}/view`;
+                      const abs = `${window.location.origin}${url}`;
+                      window.open(abs, '_blank');
+                    }}
+                    className="bg-gray-700 text-white px-3 py-1 rounded-md text-sm"
+                  >
+                    Open in New Tab (Full Viewer)
+                  </button>
                 </div>
                 
                 {user?.role === 'staff' && selectedPDF && (
@@ -446,7 +518,7 @@ const PDFManager: React.FC = () => {
                       className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                     />
                     <label htmlFor="sharePDFEdit" className="text-sm text-gray-700">
-                      Share this PDF with students (using teacher code: {user.teacherCode})
+                      Share this PDF with students (using your Staff ID)
                     </label>
                   </div>
                 )}
@@ -467,16 +539,31 @@ const PDFManager: React.FC = () => {
                         'cursor-default'
                       }`}
                     >
-                      <iframe
-                        src={selectedPDF.fileData || selectedPDF.fileUrl}
-                        width="100%"
-                        height={isFullscreen ? window.innerHeight - 150 : "100%"}
-                        style={{ minHeight: isFullscreen ? window.innerHeight - 150 : '500px', pointerEvents: annotationMode !== 'none' ? 'none' : 'auto' }}
-                        title={selectedPDF.title}
-                        onError={() => {
-                          console.log('PDF iframe failed, using fallback');
-                        }}
-                      />
+                      {/* Inline preview: if PDF use iframe; if PPT show a local-preview notice */}
+                      {String(selectedPDF.filename).toLowerCase().endsWith('.pdf') ? (
+                        <iframe
+                          src={selectedPDF.fileData || selectedPDF.fileUrl}
+                          width="100%"
+                          height={isFullscreen ? window.innerHeight - 150 : '100%'}
+                          style={{ minHeight: isFullscreen ? window.innerHeight - 150 : '500px', pointerEvents: annotationMode !== 'none' ? 'none' : 'auto' }}
+                          title={selectedPDF.title}
+                        />
+                      ) : (
+                        // PPT/PPTX handling: if we have a public URL, use Office Web Viewer, else show local preview notice
+                        (selectedPDF.fileUrl && /^https?:\/\//i.test(selectedPDF.fileUrl)) ? (
+                          <iframe
+                            src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(selectedPDF.fileUrl)}`}
+                            width="100%"
+                            height={isFullscreen ? window.innerHeight - 150 : '100%'}
+                            style={{ minHeight: isFullscreen ? window.innerHeight - 150 : '500px', pointerEvents: annotationMode !== 'none' ? 'none' : 'auto' }}
+                            title={selectedPDF.title}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-sm text-gray-600" style={{ minHeight: isFullscreen ? window.innerHeight - 150 : '500px' }}>
+                            PowerPoint inline preview requires a public URL. Use Draw mode on this page, or click Open in New Tab.
+                          </div>
+                        )
+                      )}
                     </div>
                     
                     {/* Drawing Canvas Overlay */}
@@ -508,17 +595,30 @@ const PDFManager: React.FC = () => {
                       </div>
                     )}
                   </div>
-                  {!isFullscreen && (
+      {!isFullscreen && (
                     <div className="p-4 border-t border-gray-200 text-center">
                       <p className="text-sm text-gray-600 mb-2">
-                        Can't see the PDF? Try opening it in a new tab.
+        Can't see the file? Try opening it in a new tab.
                       </p>
-                      <button
-                        onClick={() => handleViewPDF(selectedPDF)}
-                        className="bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-primary-700"
-                      >
-                        Open PDF in New Tab
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => openInNewTab(selectedPDF)}
+                          className="bg-primary-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-primary-700"
+                        >
+                          Open Raw
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!selectedPDF) return;
+                            const url = `/file/${selectedPDF.id}/view`;
+                            const abs = `${window.location.origin}${url}`;
+                            window.open(abs, '_blank');
+                          }}
+                          className="bg-gray-700 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-800"
+                        >
+                          Full Viewer
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

@@ -7,7 +7,8 @@ export interface User {
   year?: string;
   semester?: string;
   course?: string;
-  teacherCode?: string;
+  teacherCode?: string; // This will be phased out
+  connectedStaff?: string[];
   connectedTeachers?: string[];
   subject?: string;
   createdAt: string;
@@ -21,10 +22,15 @@ export interface Note {
   createdById: string;
   createdByRole: string;
   createdByName: string;
+  createdBySubject?: string;
   shared: boolean;
   copiedFromStaffId?: string;
   copiedFromStaffName?: string;
   originalNoteId?: string;
+  // Added to show source when a student saves a staff-shared note
+  originStaffId?: string;
+  originStaffSubject?: string;
+  originNoteId?: number;
   createdAt: string;
   updatedAt: string;
 }

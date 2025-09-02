@@ -19,8 +19,8 @@ const Sidebar: React.FC = () => {
     },
   ];
 
-  // Staff-only menu items
-  const staffMenuItems = [
+  // Workspace tools menu items (available to both roles)
+  const toolsMenuItems = [
     {
       name: 'Notepad',
       path: '/dashboard/notes',
@@ -51,9 +51,8 @@ const Sidebar: React.FC = () => {
   ];
 
   // Determine menu items based on user role
-  const menuItems = user?.role === 'staff' 
-    ? [...baseMenuItems, ...staffMenuItems] 
-    : baseMenuItems; // Students only get dashboard access
+  // Both roles get access to tools; sharing options inside tools remain role-aware
+  const menuItems = [...baseMenuItems, ...toolsMenuItems];
 
   return (
     <div className="bg-gray-900 text-white w-64 min-h-screen p-4">

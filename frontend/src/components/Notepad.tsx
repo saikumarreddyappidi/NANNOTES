@@ -210,7 +210,19 @@ const Notepad: React.FC = () => {
                   ))}
                 </div>
                 <div className="flex justify-between items-center text-xs text-gray-500">
-                  <span>By: {note.createdByName}</span>
+                  <span>
+                    By: {note.createdByName}
+                    {(note.createdByRole === 'staff' && (note.createdBySubject || note.shared)) && (
+                      <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
+                        {note.createdBySubject ? `• ${note.createdBySubject}` : '• Staff'}
+                      </span>
+                    )}
+                    {note.originStaffId && (
+                      <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
+                        from {note.originStaffId}{note.originStaffSubject ? ` • ${note.originStaffSubject}` : ''}
+                      </span>
+                    )}
+                  </span>
                   <span>{new Date(note.createdAt).toLocaleDateString()}</span>
                 </div>
                 {note.shared && (
@@ -335,7 +347,18 @@ const Notepad: React.FC = () => {
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">{selectedNote.title}</h2>
                   <p className="text-sm text-gray-600 mt-1">
-                    By: {selectedNote.authorName} | {new Date(selectedNote.createdAt).toLocaleDateString()}
+                    By: {selectedNote.authorName || selectedNote.createdByName}
+                    {(selectedNote.createdByRole === 'staff' && (selectedNote.createdBySubject || selectedNote.shared)) && (
+                      <span className="ml-1 text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
+                        {selectedNote.createdBySubject ? `• ${selectedNote.createdBySubject}` : '• Staff'}
+                      </span>
+                    )}
+                    {selectedNote.originStaffId && (
+                      <span className="ml-1 text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">
+                        from {selectedNote.originStaffId}{selectedNote.originStaffSubject ? ` • ${selectedNote.originStaffSubject}` : ''}
+                      </span>
+                    )}
+                    {' '}| {new Date(selectedNote.createdAt).toLocaleDateString()}
                   </p>
                 </div>
                 <div className="flex space-x-2">

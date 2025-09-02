@@ -9,7 +9,9 @@ const DashboardHome: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const location = useLocation();
   const { user } = useSelector((state: RootState) => state.auth);
-  const { notes, isLoading } = useSelector((state: RootState) => state.notes);
+  const { notes: rawNotes, isLoading } = useSelector((state: RootState) => state.notes);
+  // Ensure notes is always an array
+  const notes = Array.isArray(rawNotes) ? rawNotes : [];
   const [selectedNote, setSelectedNote] = useState<any>(null);
   const [lastFetchTime, setLastFetchTime] = useState<number>(0);
 
@@ -148,10 +150,7 @@ const DashboardHome: React.FC = () => {
                 <p className="text-sm text-gray-500">Subject</p>
                 <p className="font-medium text-gray-900">{user?.subject}</p>
               </div>
-              <div>
-                <p className="text-sm text-gray-500">Teacher Code</p>
-                <p className="font-medium text-primary-600">{user?.teacherCode}</p>
-              </div>
+              
             </>
           )}
         </div>

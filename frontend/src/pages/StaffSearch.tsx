@@ -4,39 +4,37 @@ import { toast } from 'react-toastify';
 import { Search, Plus, X, Users, BookOpen } from 'lucide-react';
 import api from '../services/api';
 
-interface Teacher {
+interface Staff {
   _id: string;
-  firstName: string;
-  lastName: string;
-  teacherCode: string;
+  registrationNumber: string;
   subject: string;
 }
 
-interface ConnectedTeacher extends Teacher {
+interface ConnectedStaff extends Staff {
   notesCount?: number;
 }
 
-const TeacherSearch: React.FC = () => {
+const StaffSearch: React.FC = () => {
   const navigate = useNavigate();
-  const [searchCode, setSearchCode] = useState('');
-  const [searchResults, setSearchResults] = useState<Teacher[]>([]);
-  const [connectedTeachers, setConnectedTeachers] = useState<ConnectedTeacher[]>([]);
+  const [searchId, setSearchId] = useState('');
+  const [searchResults, setSearchResults] = useState<Staff[]>([]);
+  const [connectedStaff, setConnectedStaff] = useState<ConnectedStaff[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
 
   useEffect(() => {
-    fetchConnectedTeachers();
+    fetchConnectedStaff();
   }, []);
 
-  const fetchConnectedTeachers = async () => {
+  const fetchConnectedStaff = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/teachers/connected');
-      setConnectedTeachers(response.data);
+      const response = await api.get('/staff/connected');
+      setConnectedStaff(response.data);
     } catch (error: any) {
-      console.error('Error fetching connected teachers:', error);
+      console.error('Error fetching connected staff:', error);
       if (error.response?.status !== 404) {
-        toast.error('Failed to fetch connected teachers');
+        toast.error('Failed to fetch connected staff');
       }
     } finally {
       setLoading(false);
@@ -45,54 +43,54 @@ const TeacherSearch: React.FC = () => {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchCode.trim()) {
-      toast.error('Please enter a teacher code');
+    if (!searchId.trim()) {
+      toast.error('Please enter a staff ID');
       return;
     }
 
     try {
       setSearchLoading(true);
-      const response = await api.get(`/teachers/search/${searchCode.trim()}`);
+      const response = await api.get(`/staff/search/${searchId.trim()}`);
       setSearchResults([response.data]);
-      toast.success('Teacher found!');
+      toast.success('Staff found!');
     } catch (error: any) {
-      console.error('Error searching teacher:', error);
+      console.error('Error searching staff:', error);
       setSearchResults([]);
       if (error.response?.status === 404) {
-        toast.error('Teacher not found with this code');
+        toast.error('Staff not found with this ID');
       } else {
-        toast.error('Failed to search teacher');
+        toast.error('Failed to search staff');
       }
     } finally {
       setSearchLoading(false);
     }
   };
 
-  const handleAddTeacher = async (teacherCode: string) => {
+  const handleAddStaff = async (staffId: string) => {
     try {
-      await api.post('/teachers/add-teacher', { teacherCode });
-      toast.success('Teacher added successfully!');
+      await api.post('/staff/add-staff', { staffId });
+      toast.success('Staff added successfully!');
       setSearchResults([]);
-      setSearchCode('');
-      fetchConnectedTeachers();
+      setSearchId('');
+      fetchConnectedStaff();
     } catch (error: any) {
-      console.error('Error adding teacher:', error);
+      console.error('Error adding staff:', error);
       if (error.response?.status === 400) {
-        toast.error(error.response.data.message || 'Teacher already connected');
+        toast.error(error.response.data.message || 'Staff already connected');
       } else {
-        toast.error('Failed to add teacher');
+        toast.error('Failed to add staff');
       }
     }
   };
 
-  const handleRemoveTeacher = async (teacherCode: string) => {
+  const handleRemoveStaff = async (staffId: string) => {
     try {
-      await api.delete(`/teachers/remove-teacher/${teacherCode}`);
-      toast.success('Teacher removed successfully!');
-      fetchConnectedTeachers();
+      await api.delete(`/staff/remove-staff/${staffId}`);
+      toast.success('Staff removed successfully!');
+      fetchConnectedStaff();
     } catch (error: any) {
-      console.error('Error removing teacher:', error);
-      toast.error('Failed to remove teacher');
+      console.error('Error removing staff:', error);
+      toast.error('Failed to remove staff');
     }
   };
 
@@ -104,10 +102,10 @@ const TeacherSearch: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-800 mb-2">
-                Teacher Search
+                Staff Search
               </h1>
               <p className="text-gray-600">
-                Search and connect with teachers to access their shared notes
+                Search and connect with staff to access their shared notes
               </p>
             </div>
             <div className="text-orange-400">
@@ -120,16 +118,16 @@ const TeacherSearch: React.FC = () => {
         <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
             <Search className="mr-2 text-orange-400" size={20} />
-            Search for Teachers
+            Search for Staff
           </h2>
           
           <form onSubmit={handleSearch} className="flex gap-3">
             <div className="flex-1">
               <input
                 type="text"
-                value={searchCode}
-                onChange={(e) => setSearchCode(e.target.value)}
-                placeholder="Enter teacher code (e.g., TCH001)"
+                value={searchId}
+                onChange={(e) => setSearchId(e.target.value)}
+                placeholder="Enter staff ID (e.g., S12345)"
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-400 focus:border-transparent"
                 disabled={searchLoading}
               />
@@ -153,52 +151,51 @@ const TeacherSearch: React.FC = () => {
         {searchResults.length > 0 && (
           <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Search Results</h3>
-            {searchResults.map((teacher) => (
+            {searchResults.map((staff) => (
               <div
-                key={teacher._id}
+                key={staff._id}
                 className="flex items-center justify-between p-4 border border-gray-200 rounded-lg"
               >
                 <div>
                   <h4 className="font-semibold text-gray-800">
-                    {teacher.firstName} {teacher.lastName}
+                    {staff.registrationNumber}
                   </h4>
-                  <p className="text-gray-600">Subject: {teacher.subject}</p>
-                  <p className="text-sm text-orange-600">Code: {teacher.teacherCode}</p>
+                  <p className="text-gray-600">Subject: {staff.subject}</p>
                 </div>
                 <button
-                  onClick={() => handleAddTeacher(teacher.teacherCode)}
+                  onClick={() => handleAddStaff(staff.registrationNumber)}
                   className="flex items-center px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
                 >
                   <Plus className="mr-1" size={16} />
-                  Add Teacher
+                  Add Staff
                 </button>
               </div>
             ))}
           </div>
         )}
 
-        {/* Connected Teachers */}
+        {/* Connected Staff */}
         <div className="bg-white rounded-xl shadow-lg p-6">
           <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
             <Users className="mr-2 text-orange-400" size={20} />
-            Connected Teachers ({connectedTeachers.length})
+            Connected Staff ({connectedStaff.length})
           </h3>
           
           {loading ? (
             <div className="flex justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
             </div>
-          ) : connectedTeachers.length === 0 ? (
+          ) : connectedStaff.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <Users className="mx-auto mb-3 text-gray-300" size={48} />
-              <p>No teachers connected yet</p>
-              <p className="text-sm">Search for teachers to access their shared notes</p>
+              <p>No staff connected yet</p>
+              <p className="text-sm">Search for staff to access their shared notes</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {connectedTeachers.map((teacher) => (
+              {connectedStaff.map((staff) => (
                 <div
-                  key={teacher._id}
+                  key={staff._id}
                   className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
                 >
                   <div className="flex items-center">
@@ -207,13 +204,12 @@ const TeacherSearch: React.FC = () => {
                     </div>
                     <div>
                       <h4 className="font-semibold text-gray-800">
-                        {teacher.firstName} {teacher.lastName}
+                        {staff.registrationNumber}
                       </h4>
-                      <p className="text-gray-600">Subject: {teacher.subject}</p>
-                      <p className="text-sm text-orange-600">Code: {teacher.teacherCode}</p>
-                      {teacher.notesCount !== undefined && (
+                      <p className="text-gray-600">Subject: {staff.subject}</p>
+                      {staff.notesCount !== undefined && (
                         <p className="text-xs text-gray-500">
-                          {teacher.notesCount} shared notes available
+                          {staff.notesCount} shared notes available
                         </p>
                       )}
                     </div>
@@ -226,9 +222,9 @@ const TeacherSearch: React.FC = () => {
                       View Notes
                     </button>
                     <button
-                      onClick={() => handleRemoveTeacher(teacher.teacherCode)}
+                      onClick={() => handleRemoveStaff(staff.registrationNumber)}
                       className="p-2 text-red-500 hover:bg-red-50 rounded"
-                      title="Remove teacher"
+                      title="Remove staff"
                     >
                       <X size={16} />
                     </button>
@@ -253,4 +249,4 @@ const TeacherSearch: React.FC = () => {
   );
 };
 
-export default TeacherSearch;
+export default StaffSearch;

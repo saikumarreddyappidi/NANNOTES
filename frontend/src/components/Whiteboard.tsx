@@ -302,7 +302,7 @@ const Whiteboard: React.FC = () => {
                   className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <label htmlFor="shareDrawing" className="text-sm text-gray-700">
-                  Share with students (using teacher code: {user.teacherCode})
+                  Share with students (using your Staff ID)
                 </label>
               </div>
             )}

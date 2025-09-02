@@ -153,8 +153,9 @@ const notesSlice = createSlice({
         state.error = null;
       })
       .addCase(createNote.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.notes.unshift(action.payload);
+  state.isLoading = false;
+  if (!Array.isArray(state.notes)) state.notes = [];
+  state.notes.unshift(action.payload);
       })
       .addCase(createNote.rejected, (state, action) => {
         state.isLoading = false;
@@ -219,8 +220,9 @@ const notesSlice = createSlice({
         state.error = null;
       })
       .addCase(saveSearchedNote.fulfilled, (state, action) => {
-        state.isLoading = false;
-        state.notes.unshift(action.payload); // Add to user's permanent notes at the beginning
+  state.isLoading = false;
+  if (!Array.isArray(state.notes)) state.notes = [];
+  state.notes.unshift(action.payload); // Add to user's permanent notes at the beginning
       })
       .addCase(saveSearchedNote.rejected, (state, action) => {
         state.isLoading = false;

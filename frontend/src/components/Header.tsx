@@ -21,13 +21,7 @@ const Header: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center space-x-4">
-          {user?.role === 'staff' && user?.teacherCode && (
-            <div className="bg-primary-50 px-3 py-1 rounded-full">
-              <span className="text-xs font-medium text-primary-700">
-                Teacher Code: {user.teacherCode}
-              </span>
-            </div>
-          )}
+          
           <button
             onClick={handleLogout}
             className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium"
