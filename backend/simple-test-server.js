@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -17,6 +19,9 @@ const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 5003;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+if (JWT_SECRET === 'dev-secret') {
+  console.warn('WARNING: Using default JWT secret; set JWT_SECRET in your environment for security.');
+}
 
 // --- Simple JSON persistence (local fallback DB) ---
 const DATA_PATH = process.env.DATA_PATH || path.join(__dirname, 'data.json');
@@ -76,10 +81,21 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 // --- Middleware ---
-app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001'],
-  credentials: true
-}));
+// Security headers
+app.use(helmet());
+
+// CORS (configurable via env CORS_ORIGINS as comma-separated list)
+const corsOrigins = (process.env.CORS_ORIGINS || 'http://localhost:3000,http://localhost:3001')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+app.use(cors({ origin: corsOrigins, credentials: true }));
+
+// Rate limiters (global and auth-specific)
+const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10); // 1 minute default
+const maxReq = parseInt(process.env.RATE_LIMIT_MAX || '120', 10); // 120 req/min default
+const globalLimiter = rateLimit({ windowMs, max: maxReq, standardHeaders: true, legacyHeaders: false });
+app.use(globalLimiter);
 // Increase limits to support larger canvas images and file uploads
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -110,6 +126,9 @@ if (mongoose) {
       if (!uri) {
         console.log('MongoDB URI not set; continuing with JSON persistence');
       } else {
+        if (process.env.MONGOOSE_DEBUG === '1') {
+          mongoose.set('debug', true);
+        }
         await mongoose.connect(uri, { dbName: process.env.MONGODB_DB || undefined });
         const userSchema = new mongoose.Schema({
           registrationNumber: { type: String, required: true, unique: true, trim: true },
@@ -363,6 +382,12 @@ app.post('/api/auth/register', async (req, res) => {
 
     if (!registrationNumber || !password || !role) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Password complexity: min 8 chars including upper, lower, digit, special
+    const strongPw = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\w\s]).{8,}$/;
+    if (!strongPw.test(password)) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters and include upper, lower, digit, and special character.' });
     }
 
     // If Mongo ready, register there first

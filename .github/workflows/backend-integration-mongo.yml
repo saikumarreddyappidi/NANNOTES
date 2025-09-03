@@ -1,0 +1,35 @@
+name: backend-integration-mongo
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  test-integration-mongo:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:6
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })' || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install backend deps
+        working-directory: backend
+        run: npm ci
+      - name: Run integration tests (Mongo mode)
+        working-directory: backend
+        env:
+          MONGODB_URI: mongodb://localhost:27017/nannotes_ci
+          JWT_SECRET: github-actions-secret
+          CORS_ORIGINS: http://localhost:3000
+        run: npm run test:integration:mongo
