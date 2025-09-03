@@ -335,9 +335,9 @@ const PDFManager: React.FC = () => {
   }, [selectedPDF]);
 
   return (
-    <div className={`h-full flex ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}>
+    <div className={`h-full flex flex-col md:flex-row ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}>
       {/* PDF List */}
-      <div className={`${isFullscreen ? 'hidden' : 'w-1/3'} bg-white border-r border-gray-200 flex flex-col`}>
+      <div className={`${isFullscreen ? 'hidden' : 'w-full md:w-1/3'} bg-white border-b md:border-b-0 md:border-r border-gray-200 flex flex-col`}>
         <div className="p-4 border-b border-gray-200">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-medium text-gray-900">Files (PDF / PowerPoint)</h3>
@@ -441,7 +441,7 @@ const PDFManager: React.FC = () => {
       </div>
 
       {/* PDF Viewer */}
-      <div className="flex-1 bg-white flex flex-col">
+  <div className="flex-1 bg-white flex flex-col">
         {selectedPDF ? (
           <div className="flex flex-col h-full">
             {/* PDF Toolbar */}

@@ -3,7 +3,12 @@ import { NavLink } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 
-const Sidebar: React.FC = () => {
+type SidebarProps = {
+  isOpen?: boolean;
+  onClose?: () => void;
+};
+
+const Sidebar: React.FC<SidebarProps> = ({ isOpen = false, onClose }) => {
   const { user } = useSelector((state: RootState) => state.auth);
 
   // Base menu items available to all users
@@ -55,9 +60,31 @@ const Sidebar: React.FC = () => {
   const menuItems = [...baseMenuItems, ...toolsMenuItems];
 
   return (
-    <div className="bg-gray-900 text-white w-64 min-h-screen p-4">
+    <>
+      {/* Backdrop for mobile */}
+      <div
+        className={`fixed inset-0 bg-black bg-opacity-40 z-30 md:hidden transition-opacity ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+        onClick={onClose}
+      />
+      <div
+        className={`fixed z-40 inset-y-0 left-0 transform md:transform-none md:static bg-gray-900 text-white w-64 min-h-screen p-4 transition-transform duration-200 ease-in-out ${
+          isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        }`}
+      >
       <div className="mb-8">
-        <h2 className="text-xl font-bold">Navigation</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold">Navigation</h2>
+          {/* Close button on mobile */}
+          <button
+            onClick={onClose}
+            className="md:hidden text-gray-300 hover:text-white p-1 rounded"
+            aria-label="Close sidebar"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
       <nav className="space-y-2">
         {menuItems.map((item) => (
@@ -71,13 +98,15 @@ const Sidebar: React.FC = () => {
                   : 'text-gray-300 hover:bg-gray-800 hover:text-white'
               }`
             }
+            onClick={onClose}
           >
             {item.icon}
             <span>{item.name}</span>
           </NavLink>
         ))}
       </nav>
-    </div>
+      </div>
+    </>
   );
 };
 

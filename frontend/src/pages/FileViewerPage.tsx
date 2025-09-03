@@ -143,7 +143,7 @@ const FileViewerPage: React.FC = () => {
             <div className="text-base font-medium text-gray-900">{file.title}</div>
             <div className="text-xs text-gray-600">{file.filename}</div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button onClick={() => setAnnotationMode(m => m === 'highlight' ? 'none' : 'highlight')} className={`px-3 py-1 rounded-md text-sm ${annotationMode === 'highlight' ? 'bg-yellow-600 text-white' : 'bg-yellow-500 text-white hover:bg-yellow-600'}`}>Highlight</button>
             <button onClick={() => setAnnotationMode(m => m === 'textbox' ? 'none' : 'textbox')} className={`px-3 py-1 rounded-md text-sm ${annotationMode === 'textbox' ? 'bg-blue-600 text-white' : 'bg-blue-500 text-white hover:bg-blue-600'}`}>Text Box</button>
             <button onClick={() => setAnnotationMode(m => m === 'draw' ? 'none' : 'draw')} className={`px-3 py-1 rounded-md text-sm ${annotationMode === 'draw' ? 'bg-green-600 text-white' : 'bg-green-500 text-white hover:bg-green-600'}`}>{annotationMode === 'draw' ? '✏️ Drawing' : 'Draw'}</button>
