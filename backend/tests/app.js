@@ -104,6 +104,56 @@ function createApp() {
     res.json(list.map(n => ({ ...n, _id: String(n._id) })));
   });
 
+  // Notes search by staff id (shared only)
+  app.get('/api/notes/search/:staffId', auth, async (req, res) => {
+    const staffId = req.params.staffId;
+    const shared = await Note.find({ createdByRole: 'staff', createdByName: staffId, shared: true }).sort({ createdAt: -1 }).lean();
+    res.json({ notes: shared.map(n => ({ ...n, _id: String(n._id) })) });
+  });
+
+  // Notes save copy (student saves shared staff note)
+  app.post('/api/notes/save/:id', auth, async (req, res) => {
+    const src = await Note.findById(req.params.id);
+    if (!src) return res.status(404).json({ message: 'Not found' });
+    if (!(src.shared && src.createdByRole === 'staff')) return res.status(400).json({ message: 'Not shared staff note' });
+    const copy = await Note.create({
+      title: src.title,
+      content: src.content,
+      tags: src.tags,
+      shared: false,
+      createdByName: req.user.registrationNumber,
+      createdByRole: req.user.role,
+    });
+    res.status(201).json({ ...copy.toObject(), _id: String(copy._id) });
+  });
+
+  // Notes update (owner only); students cannot set shared
+  app.put('/api/notes/:id', auth, async (req, res) => {
+    const doc = await Note.findById(req.params.id);
+    if (!doc) return res.status(404).json({ message: 'Not found' });
+    if (doc.createdByName !== req.user.registrationNumber) return res.status(403).json({ message: 'Forbidden' });
+    const { title, content, tags, shared } = req.body || {};
+    if (typeof title === 'string') doc.title = title;
+    if (typeof content === 'string') doc.content = content;
+    if (Array.isArray(tags)) doc.tags = tags;
+    if (doc.createdByRole === 'staff') {
+      if (shared !== undefined) doc.shared = !!shared;
+    } else {
+      doc.shared = false;
+    }
+    await doc.save();
+    res.json({ ...doc.toObject(), _id: String(doc._id) });
+  });
+
+  // Notes delete (owner only)
+  app.delete('/api/notes/:id', auth, async (req, res) => {
+    const doc = await Note.findById(req.params.id);
+    if (!doc) return res.status(404).json({ message: 'Not found' });
+    if (doc.createdByName !== req.user.registrationNumber) return res.status(403).json({ message: 'Forbidden' });
+    await Note.deleteOne({ _id: doc._id });
+    res.json({ success: true });
+  });
+
   // Files endpoints (simplified)
   app.post('/api/files', auth, async (req, res) => {
     const { title, fileUrl, filename, isShared } = req.body || {};
@@ -132,6 +182,29 @@ function createApp() {
     res.json({ success: true });
   });
 
+  // Files search by staff id (shared only)
+  app.get('/api/files/search/:staffId', auth, async (req, res) => {
+    const staffId = req.params.staffId;
+    const shared = await File.find({ ownerRole: 'staff', ownerName: staffId, isShared: true }).sort({ createdAt: -1 }).lean();
+    res.json({ files: shared.map(x => ({ ...x, _id: String(x._id) })) });
+  });
+
+  // Files save copy (student saves shared staff file)
+  app.post('/api/files/save/:id', auth, async (req, res) => {
+    const src = await File.findById(req.params.id);
+    if (!src) return res.status(404).json({ message: 'Not found' });
+    if (!(src.isShared && src.ownerRole === 'staff')) return res.status(400).json({ message: 'Not shared staff file' });
+    const copy = await File.create({
+      title: src.title,
+      fileUrl: src.fileUrl,
+      filename: src.filename,
+      isShared: false,
+      ownerName: req.user.registrationNumber,
+      ownerRole: req.user.role,
+    });
+    res.status(201).json({ ...copy.toObject(), _id: String(copy._id) });
+  });
+
   // Whiteboards endpoints (simplified)
   app.post('/api/whiteboards', auth, async (req, res) => {
     const { title, imageData, isShared } = req.body || {};
@@ -157,6 +230,28 @@ function createApp() {
     if (doc.ownerName !== req.user.registrationNumber) return res.status(403).json({ message: 'Forbidden' });
     await Whiteboard.deleteOne({ _id: doc._id });
     res.json({ success: true });
+  });
+
+  // Whiteboards search by staff id (shared only)
+  app.get('/api/whiteboards/search/:staffId', auth, async (req, res) => {
+    const staffId = req.params.staffId;
+    const shared = await Whiteboard.find({ ownerRole: 'staff', ownerName: staffId, isShared: true }).sort({ createdAt: -1 }).lean();
+    res.json({ drawings: shared.map(x => ({ ...x, _id: String(x._id) })) });
+  });
+
+  // Whiteboards save copy
+  app.post('/api/whiteboards/save/:id', auth, async (req, res) => {
+    const src = await Whiteboard.findById(req.params.id);
+    if (!src) return res.status(404).json({ message: 'Not found' });
+    if (!(src.isShared && src.ownerRole === 'staff')) return res.status(400).json({ message: 'Not shared staff whiteboard' });
+    const copy = await Whiteboard.create({
+      title: src.title,
+      imageData: src.imageData,
+      isShared: false,
+      ownerName: req.user.registrationNumber,
+      ownerRole: req.user.role,
+    });
+    res.status(201).json({ ...copy.toObject(), _id: String(copy._id) });
   });
 
   return app;

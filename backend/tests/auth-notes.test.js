@@ -125,3 +125,28 @@ test('whiteboards: create, list, delete (student cannot share)', async () => {
     .set('Authorization', `Bearer ${jwt}`)
     .expect(200);
 });
+
+test('notes: search shared staff notes and save copy as student', async () => {
+  // staff creates shared note
+  await request(app).post('/api/auth/register').send({ registrationNumber: 'T2', password: 'Password@123', role: 'staff', subject: 'Chem' }).expect(201);
+  const { body: loginStaff } = await request(app).post('/api/auth/login').send({ registrationNumber: 'T2', password: 'Password@123' }).expect(200);
+  const jwtStaff = loginStaff.token;
+  const created = await request(app).post('/api/notes').set('Authorization', `Bearer ${jwtStaff}`).send({ title: 'SNote', content: 'Shared', shared: true }).expect(201);
+
+  // student searches and saves
+  await request(app).post('/api/auth/register').send({ registrationNumber: 'U3', password: 'Password@123', role: 'student', year: '2025', semester: '1', course: 'CSE' }).expect(201);
+  const { body: loginStu } = await request(app).post('/api/auth/login').send({ registrationNumber: 'U3', password: 'Password@123' }).expect(200);
+  const jwtStu = loginStu.token;
+  const search = await request(app).get('/api/notes/search/T2').set('Authorization', `Bearer ${jwtStu}`).expect(200);
+  expect(search.body.notes.length).toBe(1);
+  await request(app).post(`/api/notes/save/${created.body._id}`).set('Authorization', `Bearer ${jwtStu}`).send({}).expect(201);
+});
+
+test('notes: student cannot toggle shared true on own note', async () => {
+  await request(app).post('/api/auth/register').send({ registrationNumber: 'U4', password: 'Password@123', role: 'student', year: '2025', semester: '1', course: 'CSE' }).expect(201);
+  const { body: loginStu } = await request(app).post('/api/auth/login').send({ registrationNumber: 'U4', password: 'Password@123' }).expect(200);
+  const jwtStu = loginStu.token;
+  const created = await request(app).post('/api/notes').set('Authorization', `Bearer ${jwtStu}`).send({ title: 'N1', content: 'C1' }).expect(201);
+  const updated = await request(app).put(`/api/notes/${created.body._id}`).set('Authorization', `Bearer ${jwtStu}`).send({ shared: true }).expect(200);
+  expect(updated.body.shared).toBe(false);
+});

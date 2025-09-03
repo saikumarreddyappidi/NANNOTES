@@ -9,9 +9,11 @@
     "dev": "nodemon src/server.ts",
     "dev-simple": "nodemon src/server-simple.ts",
     "dev-full": "nodemon src/server.ts",
-    "postinstall": "npm run build",
+  "dev-js": "node simple-test-server.js",
+  "postinstall": "npm run build",
   "test": "jest",
-  "migrate": "node scripts/migrate-data.js"
+  "migrate": "node scripts/migrate-data.js",
+  "smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\smoke-test.ps1"
   },
   "dependencies": {
     "@sentry/node": "^7.120.4",
