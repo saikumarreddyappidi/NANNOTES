@@ -147,7 +147,7 @@ npm start
 
 5. **Access the application**
 - Frontend: http://localhost:3000
-- Backend API: http://localhost:5000
+- Backend API: http://localhost:5003
 
 ## 📱 Usage
 
@@ -210,6 +210,7 @@ nannotes/
 ## 🔒 Security Features
 
 - **Password Validation**: Complex password requirements
+  - Minimum 8 characters, includes upper/lowercase, digit, and special character
 - **JWT Authentication**: Secure token-based auth
 - **Role-based Access**: Different permissions for students/staff
 - **Input Validation**: Server-side validation for all inputs

@@ -101,7 +101,8 @@ describe('Real server integration: JWT/signed tokens + Mongo fallback', () => {
 
   const staffReg = `staff_${Date.now()}`;
   const studentReg = `stud_${Date.now()}`;
-  const password = 'pass1234';
+  // Must satisfy complexity: upper, lower, digit, special, min 8
+  const password = 'Passw0rd!';
 
   const runSuite = async (name, env) => {
     const port = getRandomPort();

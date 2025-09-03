@@ -52,7 +52,7 @@ Copy `.env.example` to `.env` and configure:
 
 ```env
 NODE_ENV=development
-PORT=5000
+PORT=5003
 MONGODB_URI=mongodb://localhost:27017/nannotes
 JWT_SECRET=your-super-secret-jwt-key
 JWT_EXPIRE=7d
@@ -62,6 +62,20 @@ AWS_REGION=us-east-1
 AWS_S3_BUCKET=nannotes-uploads
 CORS_ORIGIN=http://localhost:3000
 ```
+
+## 🔑 Password Policy
+
+User passwords must meet the following minimum requirements:
+
+- At least 8 characters long
+- At least one uppercase letter (A-Z)
+- At least one lowercase letter (a-z)
+- At least one number (0-9)
+- At least one special character (for example: ! @ # $ % ^ & *)
+
+Examples that pass: `Passw0rd!`, `Str0ng#Key`
+
+If registration fails with a 400 error, ensure the password meets these rules.
 
 ## 📊 Database Models
 
