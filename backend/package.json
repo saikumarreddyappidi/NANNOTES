@@ -11,7 +11,7 @@
     "dev-full": "nodemon src/server.ts",
   "dev-js": "node simple-test-server.js",
   "postinstall": "npm run build",
-  "test": "jest",
+  "test": "jest --runInBand",
   "migrate": "node scripts/migrate-data.js",
   "smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File .\\smoke-test.ps1",
     "lint": "eslint \"src/**/*.{ts,tsx}\"",

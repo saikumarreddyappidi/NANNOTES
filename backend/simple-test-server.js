@@ -19,7 +19,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // --- Simple JSON persistence (local fallback DB) ---
-const DATA_PATH = path.join(__dirname, 'data.json');
+const DATA_PATH = process.env.DATA_PATH || path.join(__dirname, 'data.json');
 const safeWriteFile = (filePath, dataStr) => {
   try {
     const tmp = filePath + '.tmp';
