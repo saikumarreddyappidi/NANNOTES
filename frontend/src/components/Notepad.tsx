@@ -132,9 +132,9 @@ const Notepad: React.FC = () => {
   };
 
   return (
-    <div className={`h-full flex ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}>
+    <div className={`h-full flex flex-col md:flex-row ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}>
       {/* Notes List */}
-      <div className={`${isFullscreen ? 'hidden' : 'w-1/3'} bg-white border-r border-gray-200 flex flex-col`}>
+      <div className={`${isFullscreen ? 'hidden' : 'w-full md:w-1/3'} bg-white border-b md:border-b-0 md:border-r border-gray-200 flex flex-col`}>
         <div className="p-4 border-b border-gray-200">
           <div className="flex space-x-2 mb-4">
             <input
@@ -237,7 +237,7 @@ const Notepad: React.FC = () => {
       </div>
 
       {/* Note Editor */}
-      <div className="flex-1 bg-white flex flex-col">
+  <div className="flex-1 bg-white flex flex-col">
         {isEditing ? (
           <div className="flex flex-col h-full">
             <div className="p-4 border-b border-gray-200">

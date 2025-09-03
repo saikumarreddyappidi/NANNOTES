@@ -25,6 +25,28 @@ const Whiteboard: React.FC = () => {
     loadSavedDrawings();
   }, []);
 
+  // Recover draft from localStorage
+  useEffect(() => {
+    try {
+      const draft = localStorage.getItem('whiteboard_draft');
+      if (draft) {
+        const { title: t, imageData } = JSON.parse(draft);
+        if (t) setTitle(t);
+        if (imageData) {
+          const canvas = canvasRef.current;
+          if (canvas) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              const img = new Image();
+              img.onload = () => ctx.drawImage(img, 0, 0);
+              img.src = imageData;
+            }
+          }
+        }
+      }
+    } catch {}
+  }, []);
+
   const loadSavedDrawings = async () => {
     try {
       setIsLoading(true);
@@ -98,6 +120,7 @@ const Whiteboard: React.FC = () => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       }
     }
+  try { localStorage.removeItem('whiteboard_draft'); } catch {}
   };
 
   const handleSave = async () => {
@@ -111,6 +134,8 @@ const Whiteboard: React.FC = () => {
       try {
         setIsLoading(true);
         const dataUrl = canvas.toDataURL('image/png');
+        // Persist a draft for recovery
+        try { localStorage.setItem('whiteboard_draft', JSON.stringify({ title: title.trim(), imageData: dataUrl })); } catch {}
         
         const response = await api.post('/whiteboards', {
           title: title.trim(),
@@ -122,6 +147,7 @@ const Whiteboard: React.FC = () => {
         setSavedDrawings(prev => [response.data, ...prev]);
         setTitle('');
         setIsShared(false);
+        try { localStorage.removeItem('whiteboard_draft'); } catch {}
         alert('Drawing saved successfully!');
       } catch (error) {
         console.error('Error saving drawing:', error);
@@ -168,9 +194,9 @@ const Whiteboard: React.FC = () => {
   };
 
   return (
-    <div className={`h-full flex ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}>
+    <div className={`h-full flex flex-col md:flex-row ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}>
       {/* Drawings List */}
-      <div className={`${isFullscreen ? 'hidden' : 'w-1/4'} bg-white border-r border-gray-200 flex flex-col`}>
+      <div className={`${isFullscreen ? 'hidden' : 'w-full md:w-1/4'} bg-white border-b md:border-b-0 md:border-r border-gray-200 flex flex-col`}>
         <div className="p-4 border-b border-gray-200">
           <h3 className="text-lg font-medium text-gray-900 mb-4">Saved Drawings</h3>
         </div>
@@ -219,9 +245,9 @@ const Whiteboard: React.FC = () => {
       {/* Drawing Canvas */}
       <div className="flex-1 flex flex-col">
         {/* Toolbar */}
-        <div className="bg-white border-b border-gray-200 p-4">
+    <div className="bg-white border-b border-gray-200 p-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+      <div className="flex flex-wrap items-center gap-4">
               <h2 className="text-lg font-medium text-gray-900">Whiteboard</h2>
               
               {/* Color Palette */}
@@ -257,7 +283,7 @@ const Whiteboard: React.FC = () => {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 mt-2 md:mt-0">
               <button
                 onClick={toggleFullscreen}
                 className="bg-purple-500 text-white px-3 py-1 rounded-md text-sm hover:bg-purple-600"
@@ -275,7 +301,7 @@ const Whiteboard: React.FC = () => {
 
           {/* Save Section */}
           <div className="mt-4 space-y-2">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 mt-2 md:mt-0">
               <input
                 type="text"
                 placeholder="Enter drawing title..."
@@ -293,7 +319,7 @@ const Whiteboard: React.FC = () => {
             </div>
             
             {user?.role === 'staff' && (
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2 mt-2 md:mt-0">
                 <input
                   type="checkbox"
                   id="shareDrawing"

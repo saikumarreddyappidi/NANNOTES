@@ -1,11 +1,65 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 // Load env for S3 configuration
 try { require('dotenv').config({ path: require('path').join(__dirname, '.env') }); } catch (_) {}
 let AWS = null;
 try { AWS = require('aws-sdk'); } catch (_) { AWS = null; }
 const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 5003;
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
+const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+// --- Simple JSON persistence (local fallback DB) ---
+const DATA_PATH = path.join(__dirname, 'data.json');
+const safeWriteFile = (filePath, dataStr) => {
+  try {
+    const tmp = filePath + '.tmp';
+    fs.writeFileSync(tmp, dataStr, { encoding: 'utf8' });
+    fs.renameSync(tmp, filePath);
+    return true;
+  } catch (e) {
+    console.error('Persist error:', e.message || e);
+    return false;
+  }
+};
+const persist = () => {
+  try {
+    const snapshot = {
+      users,
+      notes,
+      files,
+      whiteboards,
+      counters: { userIdCounter, noteIdCounter, fileIdCounter, whiteboardIdCounter },
+      savedAt: new Date().toISOString(),
+    };
+    safeWriteFile(DATA_PATH, JSON.stringify(snapshot));
+  } catch (e) {
+    console.error('Persist exception:', e.message || e);
+  }
+};
+const loadData = () => {
+  try {
+    if (!fs.existsSync(DATA_PATH)) return;
+    const raw = fs.readFileSync(DATA_PATH, 'utf8');
+    const json = JSON.parse(raw);
+    if (Array.isArray(json.users)) { users.splice(0, users.length, ...json.users); }
+    if (Array.isArray(json.notes)) { notes.splice(0, notes.length, ...json.notes); }
+    if (Array.isArray(json.files)) { files.splice(0, files.length, ...json.files); }
+    if (Array.isArray(json.whiteboards)) { whiteboards.splice(0, whiteboards.length, ...json.whiteboards); }
+    if (json.counters) {
+      userIdCounter = Number(json.counters.userIdCounter) || userIdCounter;
+      noteIdCounter = Number(json.counters.noteIdCounter) || noteIdCounter;
+      fileIdCounter = Number(json.counters.fileIdCounter) || fileIdCounter;
+      whiteboardIdCounter = Number(json.counters.whiteboardIdCounter) || whiteboardIdCounter;
+    }
+    console.log('💾 Local data loaded from', DATA_PATH);
+  } catch (e) {
+    console.error('Load data error:', e.message || e);
+  }
+};
 
 // --- Error Handling ---
 process.on('uncaughtException', (err) => {
@@ -33,6 +87,9 @@ let userIdCounter = 1;
 let noteIdCounter = 1;
 let fileIdCounter = 1;
 let whiteboardIdCounter = 1;
+
+// Load from disk if present
+loadData();
 
 // --- Helper Functions ---
 // Parse data URL (base64) to Buffer and mime
@@ -85,13 +142,38 @@ const uploadDataUrlToS3 = async ({ dataUrl, filename, userPrefix }) => {
 const getUserFromToken = (authHeader) => {
   if (!authHeader) return null;
   const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
+  if (!token) return null;
 
-  if (!token || !token.startsWith('mock_jwt_')) return null;
-  
-  const parts = token.split('_');
-  if (parts.length < 3) return null;
-  const userId = parseInt(parts[2], 10);
-  return users.find(u => u.id === userId) || null;
+  // Back-compat: old mock token: mock_jwt_<userId>_<ts>
+  if (token.startsWith('mock_jwt_')) {
+    const parts = token.split('_');
+    if (parts.length < 3) return null;
+    const userId = parseInt(parts[2], 10);
+    return users.find(u => u.id === userId) || null;
+  }
+
+  // New signed token: signed_<userId>.<ts>.<sig>
+  if (token.startsWith('signed_')) {
+    try {
+      const raw = token.slice('signed_'.length);
+      const [uidStr, tsStr, sig] = raw.split('.');
+      const userId = parseInt(uidStr, 10);
+      const ts = parseInt(tsStr, 10);
+      if (!userId || !ts || !sig) return null;
+      if (Date.now() - ts > TOKEN_TTL_MS) return null; // expired
+      const h = crypto.createHmac('sha256', JWT_SECRET).update(`${uidStr}.${tsStr}`).digest('hex');
+      if (h !== sig) return null;
+      return users.find(u => u.id === userId) || null;
+    } catch (_) { return null; }
+  }
+  return null;
+};
+
+const createSignedToken = (userId) => {
+  const ts = Date.now().toString();
+  const payload = `${userId}.${ts}`;
+  const sig = crypto.createHmac('sha256', JWT_SECRET).update(payload).digest('hex');
+  return `signed_${payload}.${sig}`;
 };
 
 // --- Routes ---
@@ -127,13 +209,14 @@ app.post('/api/auth/register', (req, res) => {
       connectedStaff: role === 'student' ? [] : undefined
     };
 
-    users.push(user);
+  users.push(user);
+  persist();
     console.log('User registered successfully:', user.registrationNumber);
     
     res.status(201).json({ 
       message: 'Registration successful', 
       user: { ...user, password: undefined },
-      token: `mock_jwt_${user.id}_${Date.now()}`
+      token: createSignedToken(user.id)
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -159,7 +242,7 @@ app.post('/api/auth/login', (req, res) => {
     res.json({ 
       message: 'Login successful', 
       user: { ...user, password: undefined },
-      token: `mock_jwt_${user.id}_${Date.now()}`
+      token: createSignedToken(user.id)
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -202,6 +285,7 @@ app.post('/api/auth/connect-staff', (req, res) => {
   if (!student.connectedStaff) student.connectedStaff = [];
   if (!student.connectedStaff.includes(staff.registrationNumber)) {
     student.connectedStaff.push(staff.registrationNumber);
+    persist();
   }
   console.log(`Student ${student.registrationNumber} connected to staff ${staff.registrationNumber}`);
   res.json({
@@ -225,7 +309,7 @@ app.get('/api/staff/connected', (req, res) => {
       const notesCount = notes.filter(n => n.createdById === staff.id && n.shared).length;
       return { _id: `staff-${staff.id}`, registrationNumber: staff.registrationNumber, subject: staff.subject || 'General', notesCount };
     }).filter(Boolean);
-    return res.json(connected);
+  return res.json(connected);
   } catch (err) {
     console.error('Fetch connected staff error:', err);
     return res.status(500).json({ message: 'Failed to fetch connected staff' });
@@ -250,7 +334,8 @@ app.post('/api/staff/add-staff', (req, res) => {
     if (user.connectedStaff.includes(staff.registrationNumber)) {
       return res.status(400).json({ message: 'Staff already connected' });
     }
-    user.connectedStaff.push(staff.registrationNumber);
+  user.connectedStaff.push(staff.registrationNumber);
+  persist();
     console.log(`Student ${user.registrationNumber} added staff ${staff.registrationNumber}`);
     return res.json({ message: 'Staff connected' });
   } catch (err) {
@@ -266,7 +351,8 @@ app.delete('/api/staff/remove-staff/:staffId', (req, res) => {
     if (user.role !== 'student') return res.status(403).json({ message: 'Only students can remove staff' });
     const staffId = req.params.staffId;
     user.connectedStaff = (user.connectedStaff || []).filter(reg => reg !== staffId);
-    console.log(`Student ${user.registrationNumber} removed staff ${staffId}`);
+  console.log(`Student ${user.registrationNumber} removed staff ${staffId}`);
+  persist();
     return res.json({ message: 'Staff removed' });
   } catch (err) {
     console.error('Remove staff error:', err);
@@ -335,7 +421,8 @@ app.post('/api/notes', (req, res) => {
       updatedAt: new Date().toISOString()
     };
 
-    notes.push(note);
+  notes.push(note);
+  persist();
     console.log('Note created successfully:', note);
     res.status(201).json(note);
   } catch (error) {
@@ -399,7 +486,8 @@ app.post('/api/notes/save/:noteId', (req, res) => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    notes.unshift(copy);
+  notes.unshift(copy);
+  persist();
     return res.status(201).json(copy);
   } catch (err) {
     console.error('Save searched note error:', err);
@@ -464,7 +552,8 @@ app.post('/api/files/upload', (req, res) => {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
-        files.unshift(file);
+  files.unshift(file);
+  persist();
         console.log('File uploaded:', { id: file.id, filename: file.filename, by: user.registrationNumber, to: publicUrl ? 'S3' : 'local' });
         return res.status(201).json(file);
       });
@@ -492,7 +581,8 @@ app.put('/api/files/:id', (req, res) => {
       isShared: file.ownerRole === 'staff' ? (isShared !== undefined ? !!isShared : file.isShared) : false,
       updatedAt: new Date().toISOString()
     };
-    console.log('File updated:', { id });
+  console.log('File updated:', { id });
+  persist();
     return res.json(files[idx]);
   } catch (err) {
     console.error('File update error:', err);
@@ -509,7 +599,8 @@ app.delete('/api/files/:id', (req, res) => {
     if (idx === -1) return res.status(404).json({ message: 'File not found' });
     const file = files[idx];
     if (file.ownerId !== user.id) return res.status(403).json({ message: 'Forbidden: not owner' });
-    files.splice(idx, 1);
+  files.splice(idx, 1);
+  persist();
     console.log('File deleted:', { id });
     return res.json({ message: 'File deleted' });
   } catch (err) {
@@ -558,7 +649,8 @@ app.post('/api/files/save/:id', (req, res) => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    files.unshift(copy);
+  files.unshift(copy);
+  persist();
     return res.status(201).json(copy);
   } catch (err) {
     console.error('Save shared file error:', err);
@@ -608,7 +700,8 @@ app.post('/api/whiteboards', (req, res) => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    whiteboards.unshift(wb);
+  whiteboards.unshift(wb);
+  persist();
     console.log('Whiteboard saved:', { id: wb.id, by: user.registrationNumber });
     return res.status(201).json(wb);
   } catch (err) {
@@ -626,7 +719,8 @@ app.delete('/api/whiteboards/:id', (req, res) => {
     if (idx === -1) return res.status(404).json({ message: 'Whiteboard not found' });
     const wb = whiteboards[idx];
     if (wb.ownerId !== user.id) return res.status(403).json({ message: 'Forbidden: not owner' });
-    whiteboards.splice(idx, 1);
+  whiteboards.splice(idx, 1);
+  persist();
     console.log('Whiteboard deleted:', { id });
     return res.json({ message: 'Whiteboard deleted' });
   } catch (err) {
@@ -674,7 +768,8 @@ app.post('/api/whiteboards/save/:id', (req, res) => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    whiteboards.unshift(copy);
+  whiteboards.unshift(copy);
+  persist();
     return res.status(201).json(copy);
   } catch (err) {
     console.error('Save shared whiteboard error:', err);
@@ -716,7 +811,8 @@ app.put('/api/notes/:id', (req, res) => {
       updatedAt: new Date().toISOString()
     };
 
-    notes[idx] = updated;
+  notes[idx] = updated;
+  persist();
     console.log('Note updated successfully:', updated);
     return res.json(updated);
   } catch (error) {
@@ -748,7 +844,8 @@ app.delete('/api/notes/:id', (req, res) => {
       return res.status(403).json({ error: 'Forbidden: You can only delete your own notes' });
     }
 
-    const [deleted] = notes.splice(idx, 1);
+  const [deleted] = notes.splice(idx, 1);
+  persist();
     console.log('Note deleted successfully:', deleted);
     return res.status(200).json({ message: 'Note deleted successfully' });
   } catch (error) {
