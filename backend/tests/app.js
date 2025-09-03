@@ -35,6 +35,25 @@ const noteSchema = new mongoose.Schema({
 }, { timestamps: true });
 const Note = mongoose.model('Note', noteSchema);
 
+const fileSchema = new mongoose.Schema({
+  title: String,
+  fileUrl: String,
+  filename: String,
+  isShared: Boolean,
+  ownerName: String,
+  ownerRole: String,
+}, { timestamps: true });
+const File = mongoose.model('File', fileSchema);
+
+const whiteboardSchema = new mongoose.Schema({
+  title: String,
+  imageData: String,
+  isShared: Boolean,
+  ownerName: String,
+  ownerRole: String,
+}, { timestamps: true });
+const Whiteboard = mongoose.model('Whiteboard', whiteboardSchema);
+
 function createApp() {
   const app = express();
   app.use(cors());
@@ -85,7 +104,62 @@ function createApp() {
     res.json(list.map(n => ({ ...n, _id: String(n._id) })));
   });
 
+  // Files endpoints (simplified)
+  app.post('/api/files', auth, async (req, res) => {
+    const { title, fileUrl, filename, isShared } = req.body || {};
+    if (!title) return res.status(400).json({ error: 'Title is required' });
+    const f = await File.create({
+      title,
+      fileUrl: fileUrl || '',
+      filename: filename || '',
+      isShared: req.user.role === 'staff' ? !!isShared : false,
+      ownerName: req.user.registrationNumber,
+      ownerRole: req.user.role,
+    });
+    res.status(201).json({ ...f.toObject(), _id: String(f._id) });
+  });
+
+  app.get('/api/files', auth, async (req, res) => {
+    const list = await File.find({ ownerName: req.user.registrationNumber }).sort({ createdAt: -1 }).lean();
+    res.json(list.map(x => ({ ...x, _id: String(x._id) })));
+  });
+
+  app.delete('/api/files/:id', auth, async (req, res) => {
+    const doc = await File.findById(req.params.id);
+    if (!doc) return res.status(404).json({ message: 'Not found' });
+    if (doc.ownerName !== req.user.registrationNumber) return res.status(403).json({ message: 'Forbidden' });
+    await File.deleteOne({ _id: doc._id });
+    res.json({ success: true });
+  });
+
+  // Whiteboards endpoints (simplified)
+  app.post('/api/whiteboards', auth, async (req, res) => {
+    const { title, imageData, isShared } = req.body || {};
+    if (!title || !imageData) return res.status(400).json({ error: 'Title and imageData are required' });
+    const w = await Whiteboard.create({
+      title,
+      imageData,
+      isShared: req.user.role === 'staff' ? !!isShared : false,
+      ownerName: req.user.registrationNumber,
+      ownerRole: req.user.role,
+    });
+    res.status(201).json({ ...w.toObject(), _id: String(w._id) });
+  });
+
+  app.get('/api/whiteboards', auth, async (req, res) => {
+    const list = await Whiteboard.find({ ownerName: req.user.registrationNumber }).sort({ createdAt: -1 }).lean();
+    res.json(list.map(x => ({ ...x, _id: String(x._id) })));
+  });
+
+  app.delete('/api/whiteboards/:id', auth, async (req, res) => {
+    const doc = await Whiteboard.findById(req.params.id);
+    if (!doc) return res.status(404).json({ message: 'Not found' });
+    if (doc.ownerName !== req.user.registrationNumber) return res.status(403).json({ message: 'Forbidden' });
+    await Whiteboard.deleteOne({ _id: doc._id });
+    res.json({ success: true });
+  });
+
   return app;
 }
 
-module.exports = { createApp, User, Note };
+module.exports = { createApp, User, Note, File, Whiteboard };

@@ -1,7 +1,7 @@
 const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const mongoose = require('mongoose');
-const { createApp, User, Note } = require('./app');
+const { createApp, User, Note, File, Whiteboard } = require('./app');
 
 let app;
 let mongoServer;
@@ -21,6 +21,8 @@ afterAll(async () => {
 afterEach(async () => {
   await User.deleteMany({});
   await Note.deleteMany({});
+  await File.deleteMany({});
+  await Whiteboard.deleteMany({});
 });
 
 test('register, login, create and list notes (staff)', async () => {
@@ -63,4 +65,63 @@ test('login fails with wrong password', async () => {
     .post('/api/auth/login')
     .send({ registrationNumber: 'U1', password: 'WrongPass' })
     .expect(401);
+});
+
+test('files: create, list, delete (staff)', async () => {
+  const reg = await request(app)
+    .post('/api/auth/register')
+    .send({ registrationNumber: 'S1', password: 'Password@123', role: 'staff', subject: 'Phy' })
+    .expect(201);
+  const jwt = reg.body.token;
+
+  const created = await request(app)
+    .post('/api/files')
+    .set('Authorization', `Bearer ${jwt}`)
+    .send({ title: 'File A', fileUrl: 'http://example.com/a.pdf', filename: 'a.pdf', isShared: true })
+    .expect(201);
+  expect(created.body.title).toBe('File A');
+
+  const list = await request(app)
+    .get('/api/files')
+    .set('Authorization', `Bearer ${jwt}`)
+    .expect(200);
+  expect(list.body.length).toBe(1);
+
+  await request(app)
+    .delete(`/api/files/${created.body._id}`)
+    .set('Authorization', `Bearer ${jwt}`)
+    .expect(200);
+
+  const list2 = await request(app)
+    .get('/api/files')
+    .set('Authorization', `Bearer ${jwt}`)
+    .expect(200);
+  expect(list2.body.length).toBe(0);
+});
+
+test('whiteboards: create, list, delete (student cannot share)', async () => {
+  const reg = await request(app)
+    .post('/api/auth/register')
+    .send({ registrationNumber: 'U2', password: 'Password@123', role: 'student', year: '2025', semester: '1', course: 'CSE' })
+    .expect(201);
+  const jwt = reg.body.token;
+
+  const created = await request(app)
+    .post('/api/whiteboards')
+    .set('Authorization', `Bearer ${jwt}`)
+    .send({ title: 'W1', imageData: 'data:image/png;base64,AAA', isShared: true })
+    .expect(201);
+  expect(created.body.title).toBe('W1');
+  expect(created.body.isShared).toBe(false);
+
+  const list = await request(app)
+    .get('/api/whiteboards')
+    .set('Authorization', `Bearer ${jwt}`)
+    .expect(200);
+  expect(list.body.length).toBe(1);
+
+  await request(app)
+    .delete(`/api/whiteboards/${created.body._id}`)
+    .set('Authorization', `Bearer ${jwt}`)
+    .expect(200);
 });
