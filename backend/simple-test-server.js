@@ -3,6 +3,12 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+let mongoose = null;
+let jwtLib = null;
+let bcrypt = null;
+try { mongoose = require('mongoose'); } catch (_) { mongoose = null; }
+try { jwtLib = require('jsonwebtoken'); } catch (_) { jwtLib = null; }
+try { bcrypt = require('bcryptjs'); } catch (_) { bcrypt = null; }
 // Load env for S3 configuration
 try { require('dotenv').config({ path: require('path').join(__dirname, '.env') }); } catch (_) {}
 let AWS = null;
@@ -91,6 +97,70 @@ let whiteboardIdCounter = 1;
 // Load from disk if present
 loadData();
 
+// --- Optional MongoDB (Mongoose) setup for Users only ---
+let mongoReady = false;
+let UserModel = null;
+if (mongoose) {
+  (async () => {
+    try {
+      const uri = process.env.MONGODB_URI || '';
+      if (!uri) {
+        console.log('MongoDB URI not set; continuing with JSON persistence');
+      } else {
+        await mongoose.connect(uri, { dbName: process.env.MONGODB_DB || undefined });
+        const userSchema = new mongoose.Schema({
+          registrationNumber: { type: String, required: true, unique: true, trim: true },
+          password: { type: String, required: true },
+          role: { type: String, enum: ['student', 'staff'], required: true },
+          year: String,
+          semester: String,
+          course: String,
+          subject: String,
+          connectedStaff: [String],
+          createdAt: { type: Date, default: Date.now }
+        });
+        if (bcrypt) {
+          userSchema.pre('save', async function(next) {
+            if (!this.isModified('password')) return next();
+            try {
+              const salt = await bcrypt.genSalt(12);
+              this.password = await bcrypt.hash(this.password, salt);
+              next();
+            } catch (e) { next(e); }
+          });
+        }
+        UserModel = mongoose.model('User', userSchema);
+        mongoReady = true;
+        console.log('✅ Connected to MongoDB for Users');
+        // Prime in-memory mirror from DB if empty
+        const count = users.length;
+        const docs = await UserModel.find({}).lean();
+        if (count === 0 && docs.length) {
+          for (const d of docs) {
+            users.push({
+              id: userIdCounter++,
+              registrationNumber: d.registrationNumber,
+              password: d.password, // hashed
+              role: d.role,
+              year: d.year,
+              semester: d.semester,
+              course: d.course,
+              subject: d.subject,
+              connectedStaff: Array.isArray(d.connectedStaff) ? d.connectedStaff : [],
+              _mongoId: String(d._id)
+            });
+          }
+          persist();
+          console.log(`🔄 Primed in-memory users from Mongo: ${docs.length}`);
+        }
+      }
+    } catch (err) {
+      console.warn('MongoDB connection failed; continuing without it:', err.message);
+      mongoReady = false;
+    }
+  })();
+}
+
 // --- Helper Functions ---
 // Parse data URL (base64) to Buffer and mime
 const parseDataUrl = (dataUrl) => {
@@ -166,6 +236,26 @@ const getUserFromToken = (authHeader) => {
       return users.find(u => u.id === userId) || null;
     } catch (_) { return null; }
   }
+
+  // Standard JWT token support
+  if (jwtLib && token.split('.').length === 3) {
+    try {
+      const payload = jwtLib.verify(token, JWT_SECRET);
+      // Prefer finding by registrationNumber if present, else by mapped _mongoId
+      if (payload && payload.registrationNumber) {
+        const found = users.find(u => u.registrationNumber === payload.registrationNumber);
+        if (found) return found;
+      }
+      if (payload && payload.userId) {
+        // Try to map mongo id to in-memory mirror
+        const found = users.find(u => u._mongoId === String(payload.userId));
+        if (found) return found;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
   return null;
 };
 
@@ -176,6 +266,37 @@ const createSignedToken = (userId) => {
   return `signed_${payload}.${sig}`;
 };
 
+const createJwtToken = (user) => {
+  if (!jwtLib) return null;
+  const payload = {
+    userId: user._mongoId ? user._mongoId : user.id,
+    registrationNumber: user.registrationNumber,
+    role: user.role
+  };
+  return jwtLib.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+};
+
+const mirrorMongoUserIntoMemory = (doc) => {
+  // If already mirrored, return it
+  const existing = users.find(u => u._mongoId === String(doc._id) || u.registrationNumber === doc.registrationNumber);
+  if (existing) return existing;
+  const newUser = {
+    id: userIdCounter++,
+    registrationNumber: doc.registrationNumber,
+    password: doc.password,
+    role: doc.role,
+    year: doc.year,
+    semester: doc.semester,
+    course: doc.course,
+    subject: doc.subject,
+    connectedStaff: Array.isArray(doc.connectedStaff) ? doc.connectedStaff : [],
+    _mongoId: String(doc._id)
+  };
+  users.push(newUser);
+  persist();
+  return newUser;
+};
+
 // --- Routes ---
 
 // Health check
@@ -184,23 +305,48 @@ app.get('/api/health', (req, res) => {
 });
 
 // Auth routes
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   try {
     console.log('Registration attempt:', req.body);
-    const { registrationNumber, password, role, year, semester, course, subject } = req.body;
-    
+    const { registrationNumber, password, role, year, semester, course, subject } = req.body || {};
+
     if (!registrationNumber || !password || !role) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-    
+
+    // If Mongo ready, register there first
+    if (mongoReady && UserModel) {
+      const existing = await UserModel.findOne({ registrationNumber });
+      if (existing) return res.status(400).json({ error: 'User already exists' });
+      const doc = new UserModel({
+        registrationNumber,
+        password,
+        role,
+        year,
+        semester,
+        course,
+        subject,
+        connectedStaff: role === 'student' ? [] : undefined
+      });
+      await doc.save();
+      const mirrored = mirrorMongoUserIntoMemory(doc.toObject());
+      const token = createJwtToken(mirrored) || createSignedToken(mirrored.id);
+      console.log('User registered successfully (Mongo):', mirrored.registrationNumber);
+      return res.status(201).json({
+        message: 'Registration successful',
+        user: { ...mirrored, password: undefined },
+        token
+      });
+    }
+
+    // Fallback: in-memory only
     if (users.find(u => u.registrationNumber === registrationNumber)) {
       return res.status(400).json({ error: 'User already exists' });
     }
-
     const user = {
       id: userIdCounter++,
       registrationNumber,
-      password, // In real app, this should be hashed
+      password,
       role,
       year,
       semester,
@@ -208,13 +354,11 @@ app.post('/api/auth/register', (req, res) => {
       subject,
       connectedStaff: role === 'student' ? [] : undefined
     };
-
-  users.push(user);
-  persist();
-    console.log('User registered successfully:', user.registrationNumber);
-    
-    res.status(201).json({ 
-      message: 'Registration successful', 
+    users.push(user);
+    persist();
+    console.log('User registered successfully (memory):', user.registrationNumber);
+    return res.status(201).json({
+      message: 'Registration successful',
       user: { ...user, password: undefined },
       token: createSignedToken(user.id)
     });
@@ -224,23 +368,41 @@ app.post('/api/auth/register', (req, res) => {
   }
 });
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   try {
     console.log('Login attempt:', req.body);
-    const { registrationNumber, password } = req.body;
-    
+    const { registrationNumber, password } = req.body || {};
     if (!registrationNumber || !password) {
       return res.status(400).json({ error: 'Missing credentials' });
     }
-    
+
+    // Try Mongo first
+    if (mongoReady && UserModel) {
+      const doc = await UserModel.findOne({ registrationNumber });
+      if (doc) {
+        let ok = false;
+        if (bcrypt) ok = await bcrypt.compare(password, doc.password);
+        else ok = password && doc.password && typeof doc.password === 'string' ? (doc.password === password) : false;
+        if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+        const mirrored = mirrorMongoUserIntoMemory(doc.toObject());
+        const token = createJwtToken(mirrored) || createSignedToken(mirrored.id);
+        console.log('User logged in successfully (Mongo):', mirrored.registrationNumber);
+        return res.json({
+          message: 'Login successful',
+          user: { ...mirrored, password: undefined },
+          token
+        });
+      }
+    }
+
+    // Fallback: in-memory
     const user = users.find(u => u.registrationNumber === registrationNumber && u.password === password);
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-
-    console.log('User logged in successfully:', user.registrationNumber);
-    res.json({ 
-      message: 'Login successful', 
+    console.log('User logged in successfully (memory):', user.registrationNumber);
+    return res.json({
+      message: 'Login successful',
       user: { ...user, password: undefined },
       token: createSignedToken(user.id)
     });
