@@ -7,12 +7,11 @@ import Header from './Header';
 
 const Dashboard: React.FC = () => {
   const { user } = useSelector((state: RootState) => state.auth);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   if (!user) {
     return <Navigate to="/login" replace />;
   }
-
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div className="flex h-screen bg-gray-100">

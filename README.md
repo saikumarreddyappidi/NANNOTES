@@ -97,7 +97,7 @@ npm run dev
 ### Environment Variables (.env)
 ```env
 NODE_ENV=development
-PORT=5000
+PORT=5003
 MONGODB_URI=mongodb://localhost:27017/nannotes
 JWT_SECRET=your-super-secret-jwt-key
 JWT_EXPIRE=7d
@@ -105,7 +105,7 @@ AWS_ACCESS_KEY_ID=your-aws-access-key
 AWS_SECRET_ACCESS_KEY=your-aws-secret-key
 AWS_REGION=us-east-1
 AWS_S3_BUCKET=nannotes-uploads
-CORS_ORIGIN=http://localhost:3000
+CORS_ORIGINS=http://localhost:3000
 ```
 
 ## 🚀 Getting Started

@@ -12,3 +12,6 @@ yarn-error.log*
 *.log
 coverage/
 .nyc_output/
+
+# Integration test artifacts
+tests/.data_test_*.json
