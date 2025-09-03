@@ -100,6 +100,7 @@ loadData();
 // --- Optional MongoDB (Mongoose) setup for Users only ---
 let mongoReady = false;
 let UserModel = null;
+let NoteModel = null;
 if (mongoose) {
   (async () => {
     try {
@@ -130,6 +131,23 @@ if (mongoose) {
           });
         }
         UserModel = mongoose.model('User', userSchema);
+        const noteSchema = new mongoose.Schema({
+          title: { type: String, required: true },
+          content: { type: String, required: true },
+          tags: { type: [String], default: [] },
+          shared: { type: Boolean, default: false },
+          createdByName: { type: String, required: true }, // registrationNumber
+          createdByRole: { type: String, enum: ['student', 'staff'], required: true },
+          createdBySubject: { type: String },
+          originStaffId: { type: String }, // registrationNumber
+          originStaffSubject: { type: String },
+          originNoteId: { type: String },
+          createdAt: { type: Date, default: Date.now },
+          updatedAt: { type: Date, default: Date.now }
+        }, { timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' } });
+        noteSchema.index({ createdByName: 1, createdAt: -1 });
+        noteSchema.index({ shared: 1, createdByRole: 1, createdByName: 1 });
+        NoteModel = mongoose.model('Note', noteSchema);
         mongoReady = true;
         console.log('✅ Connected to MongoDB for Users');
         // Prime in-memory mirror from DB if empty
@@ -524,7 +542,7 @@ app.delete('/api/staff/remove-staff/:staffId', (req, res) => {
 
 
 // Notes routes
-app.get('/api/notes', (req, res) => {
+app.get('/api/notes', async (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization);
     if (!user) {
@@ -532,30 +550,43 @@ app.get('/api/notes', (req, res) => {
     }
     console.log(`Fetching notes for user: ${user.registrationNumber}`);
 
+    if (mongoReady && NoteModel) {
+      if (user.role === 'staff') {
+        const list = await NoteModel.find({ createdByName: user.registrationNumber })
+          .sort({ createdAt: -1 }).lean();
+        return res.json(list.map(n => ({ ...n, _id: String(n._id) })));
+      } else {
+        const own = await NoteModel.find({ createdByName: user.registrationNumber })
+          .sort({ createdAt: -1 }).lean();
+        const connected = Array.isArray(user.connectedStaff) ? user.connectedStaff : [];
+        let shared = [];
+        if (connected.length) {
+          shared = await NoteModel.find({ shared: true, createdByRole: 'staff', createdByName: { $in: connected } })
+            .sort({ createdAt: -1 }).lean();
+        }
+        return res.json([...own, ...shared].map(n => ({ ...n, _id: String(n._id) })));
+      }
+    }
+
+    // Fallback to in-memory
     let userNotes = [];
     if (user.role === 'staff') {
       userNotes = notes.filter(note => note.createdById === user.id);
-    } else { // Student
+    } else {
       const ownNotes = notes.filter(note => note.createdById === user.id);
       const connectedStaffRegNumbers = user.connectedStaff || [];
-      
-      const sharedNotes = notes.filter(note => 
-        note.shared && 
-        note.createdByRole === 'staff' &&
-        connectedStaffRegNumbers.includes(note.createdByName)
-      );
+      const sharedNotes = notes.filter(note => note.shared && note.createdByRole === 'staff' && connectedStaffRegNumbers.includes(note.createdByName));
       userNotes = [...ownNotes, ...sharedNotes];
     }
-    
     console.log(`Found ${userNotes.length} notes for user ${user.registrationNumber}`);
-    res.json(userNotes);
+    return res.json(userNotes);
   } catch (error) {
     console.error('Notes fetch error:', error);
     res.status(500).json({ error: 'Failed to fetch notes' });
   }
 });
 
-app.post('/api/notes', (req, res) => {
+app.post('/api/notes', async (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization);
     if (!user) {
@@ -568,7 +599,21 @@ app.post('/api/notes', (req, res) => {
     if (!title || !content) {
       return res.status(400).json({ error: 'Title and content are required' });
     }
-    
+    if (mongoReady && NoteModel) {
+      const doc = await NoteModel.create({
+        title,
+        content,
+        tags: Array.isArray(tags) ? tags : [],
+        shared: user.role === 'staff' ? !!shared : false,
+        createdByName: user.registrationNumber,
+        createdByRole: user.role,
+        createdBySubject: user.role === 'staff' ? (user.subject || 'General') : undefined
+      });
+      const data = doc.toObject();
+      console.log('Note created successfully (Mongo):', { id: String(data._id) });
+      return res.status(201).json({ ...data, _id: String(data._id) });
+    }
+
     const note = {
       _id: noteIdCounter++,
       title,
@@ -582,11 +627,10 @@ app.post('/api/notes', (req, res) => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-
-  notes.push(note);
-  persist();
-    console.log('Note created successfully:', note);
-    res.status(201).json(note);
+    notes.push(note);
+    persist();
+    console.log('Note created successfully (memory):', note);
+    return res.status(201).json(note);
   } catch (error) {
     console.error('Note creation error:', error);
     res.status(500).json({ error: 'Failed to create note' });
@@ -594,7 +638,7 @@ app.post('/api/notes', (req, res) => {
 });
 
 // Search shared notes by staff registrationNumber (for students)
-app.get('/api/notes/search/:staffId', (req, res) => {
+app.get('/api/notes/search/:staffId', async (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
@@ -603,9 +647,14 @@ app.get('/api/notes/search/:staffId', (req, res) => {
     const staff = users.find(u => u.registrationNumber === staffId && u.role === 'staff');
     if (!staff) return res.status(404).json({ message: 'Staff not found' });
 
-    const sharedNotes = notes.filter(n =>
-      n.createdByRole === 'staff' && n.shared && n.createdByName === staff.registrationNumber
-    );
+    if (mongoReady && NoteModel) {
+      const sharedNotes = await NoteModel.find({ createdByRole: 'staff', shared: true, createdByName: staff.registrationNumber })
+        .sort({ createdAt: -1 }).lean();
+      const teacherInfo = { registrationNumber: staff.registrationNumber, subject: staff.subject || 'General', notesCount: sharedNotes.length };
+      return res.json({ notes: sharedNotes.map(n => ({ ...n, _id: String(n._id) })), teacherInfo });
+    }
+
+    const sharedNotes = notes.filter(n => n.createdByRole === 'staff' && n.shared && n.createdByName === staff.registrationNumber);
 
     const teacherInfo = {
       registrationNumber: staff.registrationNumber,
@@ -621,17 +670,38 @@ app.get('/api/notes/search/:staffId', (req, res) => {
 });
 
 // Save a shared note into the student's own notes
-app.post('/api/notes/save/:noteId', (req, res) => {
+app.post('/api/notes/save/:noteId', async (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    if (mongoReady && NoteModel) {
+      const srcId = req.params.noteId;
+      const source = await NoteModel.findOne({ _id: srcId }).lean();
+      if (!source) return res.status(404).json({ message: 'Note not found' });
+      if (!(source.shared && source.createdByRole === 'staff')) {
+        return res.status(400).json({ message: 'Note is not a shared staff note' });
+      }
+      const copyDoc = await NoteModel.create({
+        title: source.title,
+        content: source.content,
+        tags: Array.isArray(source.tags) ? [...source.tags] : [],
+        shared: false,
+        createdByName: user.registrationNumber,
+        createdByRole: user.role,
+        originStaffId: source.createdByName,
+        originStaffSubject: source.createdBySubject || 'General',
+        originNoteId: String(source._id)
+      });
+      const data = copyDoc.toObject();
+      return res.status(201).json({ ...data, _id: String(data._id) });
+    }
+
     const noteId = parseInt(req.params.noteId, 10);
     const source = notes.find(n => n._id === noteId);
     if (!source) return res.status(404).json({ message: 'Note not found' });
     if (!(source.shared && source.createdByRole === 'staff')) {
       return res.status(400).json({ message: 'Note is not a shared staff note' });
     }
-
     const copy = {
       _id: noteIdCounter++,
       title: source.title,
@@ -641,15 +711,14 @@ app.post('/api/notes/save/:noteId', (req, res) => {
       createdById: user.id,
       createdByName: user.registrationNumber,
       createdByRole: user.role,
-      // Preserve origin metadata for display in student's notepad
       originStaffId: source.createdByName,
       originStaffSubject: source.createdBySubject || 'General',
       originNoteId: source._id,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-  notes.unshift(copy);
-  persist();
+    notes.unshift(copy);
+    persist();
     return res.status(201).json(copy);
   } catch (err) {
     console.error('Save searched note error:', err);
@@ -940,42 +1009,52 @@ app.post('/api/whiteboards/save/:id', (req, res) => {
 });
 
 // Update an existing note (owner only)
-app.put('/api/notes/:id', (req, res) => {
+app.put('/api/notes/:id', async (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization);
     if (!user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
+    if (mongoReady && NoteModel) {
+      const id = req.params.id;
+      const doc = await NoteModel.findById(id);
+      if (!doc) return res.status(404).json({ error: 'Note not found' });
+      if (doc.createdByName !== user.registrationNumber) {
+        return res.status(403).json({ error: 'Forbidden: You can only edit your own notes' });
+      }
+      const { title, content, tags, shared } = req.body || {};
+      if (typeof title === 'string' && title.length) doc.title = title;
+      if (typeof content === 'string' && content.length) doc.content = content;
+      if (Array.isArray(tags)) doc.tags = tags;
+      if (doc.createdByRole === 'staff') {
+        if (shared !== undefined) doc.shared = !!shared;
+      } else {
+        doc.shared = false;
+      }
+      await doc.save();
+      const data = doc.toObject();
+      console.log('Note updated successfully (Mongo):', { id: String(data._id) });
+      return res.json({ ...data, _id: String(data._id) });
+    }
 
     const noteId = parseInt(req.params.id, 10);
-    if (Number.isNaN(noteId)) {
-      return res.status(400).json({ error: 'Invalid note id' });
-    }
-
+    if (Number.isNaN(noteId)) return res.status(400).json({ error: 'Invalid note id' });
     const idx = notes.findIndex(n => n._id === noteId);
-    if (idx === -1) {
-      return res.status(404).json({ error: 'Note not found' });
-    }
-
+    if (idx === -1) return res.status(404).json({ error: 'Note not found' });
     const note = notes[idx];
-    if (note.createdById !== user.id) {
-      return res.status(403).json({ error: 'Forbidden: You can only edit your own notes' });
-    }
-
+    if (note.createdById !== user.id) return res.status(403).json({ error: 'Forbidden: You can only edit your own notes' });
     const { title, content, tags, shared } = req.body || {};
     const updated = {
       ...note,
       title: typeof title === 'string' && title.length ? title : note.title,
       content: typeof content === 'string' && content.length ? content : note.content,
       tags: Array.isArray(tags) ? tags : note.tags,
-      // Only staff can set shared flag; students' notes remain unshared
       shared: note.createdByRole === 'staff' ? (shared !== undefined ? !!shared : note.shared) : false,
       updatedAt: new Date().toISOString()
     };
-
-  notes[idx] = updated;
-  persist();
-    console.log('Note updated successfully:', updated);
+    notes[idx] = updated;
+    persist();
+    console.log('Note updated successfully (memory):', updated);
     return res.json(updated);
   } catch (error) {
     console.error('Note update error:', error);
@@ -984,31 +1063,33 @@ app.put('/api/notes/:id', (req, res) => {
 });
 
 // Delete a note (owner only)
-app.delete('/api/notes/:id', (req, res) => {
+app.delete('/api/notes/:id', async (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization);
     if (!user) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
+    if (mongoReady && NoteModel) {
+      const id = req.params.id;
+      const doc = await NoteModel.findById(id);
+      if (!doc) return res.status(404).json({ error: 'Note not found' });
+      if (doc.createdByName !== user.registrationNumber) {
+        return res.status(403).json({ error: 'Forbidden: You can only delete your own notes' });
+      }
+      await NoteModel.deleteOne({ _id: id });
+      console.log('Note deleted successfully (Mongo):', { id });
+      return res.status(200).json({ message: 'Note deleted successfully' });
+    }
 
     const noteId = parseInt(req.params.id, 10);
-    if (Number.isNaN(noteId)) {
-      return res.status(400).json({ error: 'Invalid note id' });
-    }
-
+    if (Number.isNaN(noteId)) return res.status(400).json({ error: 'Invalid note id' });
     const idx = notes.findIndex(n => n._id === noteId);
-    if (idx === -1) {
-      return res.status(404).json({ error: 'Note not found' });
-    }
-
+    if (idx === -1) return res.status(404).json({ error: 'Note not found' });
     const note = notes[idx];
-    if (note.createdById !== user.id) {
-      return res.status(403).json({ error: 'Forbidden: You can only delete your own notes' });
-    }
-
-  const [deleted] = notes.splice(idx, 1);
-  persist();
-    console.log('Note deleted successfully:', deleted);
+    if (note.createdById !== user.id) return res.status(403).json({ error: 'Forbidden: You can only delete your own notes' });
+    notes.splice(idx, 1);
+    persist();
+    console.log('Note deleted successfully (memory):', { _id: noteId });
     return res.status(200).json({ message: 'Note deleted successfully' });
   } catch (error) {
     console.error('Note deletion error:', error);
