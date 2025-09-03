@@ -101,6 +101,8 @@ loadData();
 let mongoReady = false;
 let UserModel = null;
 let NoteModel = null;
+let FileModel = null;
+let WhiteboardModel = null;
 if (mongoose) {
   (async () => {
     try {
@@ -148,6 +150,37 @@ if (mongoose) {
         noteSchema.index({ createdByName: 1, createdAt: -1 });
         noteSchema.index({ shared: 1, createdByRole: 1, createdByName: 1 });
         NoteModel = mongoose.model('Note', noteSchema);
+
+        const fileSchema = new mongoose.Schema({
+          title: { type: String, required: true },
+          filename: { type: String, required: true },
+          fileUrl: { type: String }, // preferred public URL
+          fileData: { type: String }, // data URL fallback
+          ownerName: { type: String, required: true },
+          ownerRole: { type: String, enum: ['student', 'staff'], required: true },
+          ownerSubject: { type: String },
+          isShared: { type: Boolean, default: false },
+          annotations: { type: Array, default: [] },
+          createdAt: { type: Date, default: Date.now },
+          updatedAt: { type: Date, default: Date.now }
+        }, { timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' } });
+        fileSchema.index({ ownerName: 1, createdAt: -1 });
+        fileSchema.index({ isShared: 1, ownerRole: 1, ownerName: 1 });
+        FileModel = mongoose.model('File', fileSchema);
+
+        const whiteboardSchema = new mongoose.Schema({
+          title: { type: String, required: true },
+          imageData: { type: String, required: true }, // data URL
+          ownerName: { type: String, required: true },
+          ownerRole: { type: String, enum: ['student', 'staff'], required: true },
+          ownerSubject: { type: String },
+          isShared: { type: Boolean, default: false },
+          createdAt: { type: Date, default: Date.now },
+          updatedAt: { type: Date, default: Date.now }
+        }, { timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' } });
+        whiteboardSchema.index({ ownerName: 1, createdAt: -1 });
+        whiteboardSchema.index({ isShared: 1, ownerRole: 1, ownerName: 1 });
+        WhiteboardModel = mongoose.model('Whiteboard', whiteboardSchema);
         mongoReady = true;
         console.log('✅ Connected to MongoDB for Users');
         // Prime in-memory mirror from DB if empty
@@ -727,11 +760,27 @@ app.post('/api/notes/save/:noteId', async (req, res) => {
 });
 
 // Files (PDF/PPT) routes
-app.get('/api/files', (req, res) => {
+app.get('/api/files', async (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
 
+    if (mongoReady && FileModel) {
+      if (user.role === 'staff') {
+        const list = await FileModel.find({ ownerName: user.registrationNumber }).sort({ createdAt: -1 }).lean();
+        return res.json(list.map(d => ({ ...d, id: String(d._id) })));
+      } else {
+        const own = await FileModel.find({ ownerName: user.registrationNumber }).sort({ createdAt: -1 }).lean();
+        const connected = user.connectedStaff || [];
+        let shared = [];
+        if (connected.length) {
+          shared = await FileModel.find({ isShared: true, ownerRole: 'staff', ownerName: { $in: connected } }).sort({ createdAt: -1 }).lean();
+        }
+        return res.json([...own, ...shared].map(d => ({ ...d, id: String(d._id) })));
+      }
+    }
+
+    // Fallback
     let userFiles = [];
     if (user.role === 'staff') {
       userFiles = files.filter(f => f.ownerId === user.id);
@@ -741,7 +790,6 @@ app.get('/api/files', (req, res) => {
       const shared = files.filter(f => f.isShared && f.ownerRole === 'staff' && connected.includes(f.ownerName));
       userFiles = [...own, ...shared];
     }
-
     return res.json(userFiles);
   } catch (err) {
     console.error('Files fetch error:', err);
@@ -766,12 +814,27 @@ app.post('/api/files/upload', (req, res) => {
         publicUrl = url;
       })
       .catch(() => {})
-      .finally(() => {
+      .finally(async () => {
+        if (mongoReady && FileModel) {
+          const doc = await FileModel.create({
+            title,
+            filename,
+            fileData: publicUrl ? undefined : fileData,
+            fileUrl: publicUrl || fileData,
+            ownerName: user.registrationNumber,
+            ownerRole: user.role,
+            ownerSubject: user.role === 'staff' ? (user.subject || 'General') : undefined,
+            isShared: user.role === 'staff' ? !!isShared : false,
+            annotations: []
+          });
+          const data = doc.toObject();
+          console.log('File uploaded (Mongo):', { id: String(data._id), filename: data.filename, by: user.registrationNumber, to: publicUrl ? 'S3' : 'local' });
+          return res.status(201).json({ ...data, id: String(data._id) });
+        }
         const file = {
           id: String(fileIdCounter++),
           title,
           filename,
-          // If S3 URL available, prefer it; keep data URL as fallback for local dev
           fileData: publicUrl ? undefined : fileData,
           fileUrl: publicUrl || fileData,
           ownerId: user.id,
@@ -783,9 +846,9 @@ app.post('/api/files/upload', (req, res) => {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
-  files.unshift(file);
-  persist();
-        console.log('File uploaded:', { id: file.id, filename: file.filename, by: user.registrationNumber, to: publicUrl ? 'S3' : 'local' });
+        files.unshift(file);
+        persist();
+        console.log('File uploaded (memory):', { id: file.id, filename: file.filename, by: user.registrationNumber, to: publicUrl ? 'S3' : 'local' });
         return res.status(201).json(file);
       });
   } catch (err) {
@@ -794,17 +857,30 @@ app.post('/api/files/upload', (req, res) => {
   }
 });
 
-app.put('/api/files/:id', (req, res) => {
+app.put('/api/files/:id', async (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    if (mongoReady && FileModel) {
+      const id = String(req.params.id);
+      const doc = await FileModel.findById(id);
+      if (!doc) return res.status(404).json({ message: 'File not found' });
+      if (doc.ownerName !== user.registrationNumber) return res.status(403).json({ message: 'Forbidden: not owner' });
+      const { annotations, isShared } = req.body || {};
+      if (Array.isArray(annotations)) doc.annotations = annotations;
+      if (doc.ownerRole === 'staff' && isShared !== undefined) doc.isShared = !!isShared;
+      if (doc.ownerRole !== 'staff') doc.isShared = false;
+      await doc.save();
+      const data = doc.toObject();
+      console.log('File updated (Mongo):', { id });
+      return res.json({ ...data, id: String(data._id) });
+    }
 
     const id = String(req.params.id);
     const idx = files.findIndex(f => f.id === id);
     if (idx === -1) return res.status(404).json({ message: 'File not found' });
     const file = files[idx];
     if (file.ownerId !== user.id) return res.status(403).json({ message: 'Forbidden: not owner' });
-
     const { annotations, isShared } = req.body || {};
     files[idx] = {
       ...file,
@@ -812,8 +888,8 @@ app.put('/api/files/:id', (req, res) => {
       isShared: file.ownerRole === 'staff' ? (isShared !== undefined ? !!isShared : file.isShared) : false,
       updatedAt: new Date().toISOString()
     };
-  console.log('File updated:', { id });
-  persist();
+    console.log('File updated (memory):', { id });
+    persist();
     return res.json(files[idx]);
   } catch (err) {
     console.error('File update error:', err);
@@ -821,18 +897,27 @@ app.put('/api/files/:id', (req, res) => {
   }
 });
 
-app.delete('/api/files/:id', (req, res) => {
+app.delete('/api/files/:id', async (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    if (mongoReady && FileModel) {
+      const id = String(req.params.id);
+      const doc = await FileModel.findById(id);
+      if (!doc) return res.status(404).json({ message: 'File not found' });
+      if (doc.ownerName !== user.registrationNumber) return res.status(403).json({ message: 'Forbidden: not owner' });
+      await FileModel.deleteOne({ _id: id });
+      console.log('File deleted (Mongo):', { id });
+      return res.json({ message: 'File deleted' });
+    }
     const id = String(req.params.id);
     const idx = files.findIndex(f => f.id === id);
     if (idx === -1) return res.status(404).json({ message: 'File not found' });
     const file = files[idx];
     if (file.ownerId !== user.id) return res.status(403).json({ message: 'Forbidden: not owner' });
-  files.splice(idx, 1);
-  persist();
-    console.log('File deleted:', { id });
+    files.splice(idx, 1);
+    persist();
+    console.log('File deleted (memory):', { id });
     return res.json({ message: 'File deleted' });
   } catch (err) {
     console.error('File delete error:', err);
@@ -841,13 +926,18 @@ app.delete('/api/files/:id', (req, res) => {
 });
 
 // Search shared files by staff registrationNumber (for students)
-app.get('/api/files/search/:staffId', (req, res) => {
+app.get('/api/files/search/:staffId', async (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
     const staffId = req.params.staffId;
     const staff = users.find(u => u.registrationNumber === staffId && u.role === 'staff');
     if (!staff) return res.status(404).json({ message: 'Staff not found' });
+    if (mongoReady && FileModel) {
+      const shared = await FileModel.find({ isShared: true, ownerRole: 'staff', ownerName: staff.registrationNumber }).sort({ createdAt: -1 }).lean();
+      const teacherInfo = { registrationNumber: staff.registrationNumber, subject: staff.subject || 'General', filesCount: shared.length };
+      return res.json({ files: shared.map(d => ({ ...d, id: String(d._id) })), teacherInfo });
+    }
     const shared = files.filter(f => f.isShared && f.ownerRole === 'staff' && f.ownerName === staff.registrationNumber);
     const teacherInfo = { registrationNumber: staff.registrationNumber, subject: staff.subject || 'General', filesCount: shared.length };
     return res.json({ files: shared, teacherInfo });
@@ -858,30 +948,35 @@ app.get('/api/files/search/:staffId', (req, res) => {
 });
 
 // Save a shared staff file into the student's own files
-app.post('/api/files/save/:id', (req, res) => {
+app.post('/api/files/save/:id', async (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    if (mongoReady && FileModel) {
+      const id = String(req.params.id);
+      const src = await FileModel.findById(id).lean();
+      if (!src) return res.status(404).json({ message: 'File not found' });
+      if (!(src.isShared && src.ownerRole === 'staff')) return res.status(400).json({ message: 'File is not a shared staff file' });
+      const copyDoc = await FileModel.create({
+        title: src.title,
+        filename: src.filename,
+        fileUrl: src.fileUrl,
+        fileData: src.fileData,
+        ownerName: user.registrationNumber,
+        ownerRole: user.role,
+        isShared: false,
+        annotations: Array.isArray(src.annotations) ? [...src.annotations] : []
+      });
+      const data = copyDoc.toObject();
+      return res.status(201).json({ ...data, id: String(data._id) });
+    }
     const id = String(req.params.id);
     const source = files.find(f => f.id === id);
     if (!source) return res.status(404).json({ message: 'File not found' });
-    if (!(source.isShared && source.ownerRole === 'staff')) {
-      return res.status(400).json({ message: 'File is not a shared staff file' });
-    }
-    const copy = {
-      ...source,
-      id: String(fileIdCounter++),
-      ownerId: user.id,
-      ownerName: user.registrationNumber,
-      ownerRole: user.role,
-      ownerSubject: undefined,
-      isShared: false,
-      annotations: Array.isArray(source.annotations) ? [...source.annotations] : [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-  files.unshift(copy);
-  persist();
+    if (!(source.isShared && source.ownerRole === 'staff')) return res.status(400).json({ message: 'File is not a shared staff file' });
+    const copy = { ...source, id: String(fileIdCounter++), ownerId: user.id, ownerName: user.registrationNumber, ownerRole: user.role, ownerSubject: undefined, isShared: false, annotations: Array.isArray(source.annotations) ? [...source.annotations] : [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    files.unshift(copy);
+    persist();
     return res.status(201).json(copy);
   } catch (err) {
     console.error('Save shared file error:', err);
@@ -890,11 +985,24 @@ app.post('/api/files/save/:id', (req, res) => {
 });
 
 // Whiteboard routes
-app.get('/api/whiteboards', (req, res) => {
+app.get('/api/whiteboards', async (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
-
+    if (mongoReady && WhiteboardModel) {
+      if (user.role === 'staff') {
+        const list = await WhiteboardModel.find({ ownerName: user.registrationNumber }).sort({ createdAt: -1 }).lean();
+        return res.json(list.map(d => ({ ...d, id: String(d._id) })));
+      } else {
+        const own = await WhiteboardModel.find({ ownerName: user.registrationNumber }).sort({ createdAt: -1 }).lean();
+        const connected = user.connectedStaff || [];
+        let shared = [];
+        if (connected.length) {
+          shared = await WhiteboardModel.find({ isShared: true, ownerRole: 'staff', ownerName: { $in: connected } }).sort({ createdAt: -1 }).lean();
+        }
+        return res.json([...own, ...shared].map(d => ({ ...d, id: String(d._id) })));
+      }
+    }
     let result = [];
     if (user.role === 'staff') {
       result = whiteboards.filter(w => w.ownerId === user.id);
@@ -911,29 +1019,41 @@ app.get('/api/whiteboards', (req, res) => {
   }
 });
 
-app.post('/api/whiteboards', (req, res) => {
+app.post('/api/whiteboards', async (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
 
     const { title, imageData, isShared } = req.body || {};
     if (!title || !imageData) return res.status(400).json({ message: 'title and imageData are required' });
-
+    if (mongoReady && WhiteboardModel) {
+      const doc = await WhiteboardModel.create({
+        title,
+        imageData,
+        ownerName: user.registrationNumber,
+        ownerRole: user.role,
+        ownerSubject: user.role === 'staff' ? (user.subject || 'General') : undefined,
+        isShared: user.role === 'staff' ? !!isShared : false
+      });
+      const data = doc.toObject();
+      console.log('Whiteboard saved (Mongo):', { id: String(data._id), by: user.registrationNumber });
+      return res.status(201).json({ ...data, id: String(data._id) });
+    }
     const wb = {
       id: String(whiteboardIdCounter++),
       title,
-      imageData, // data URL (png)
+      imageData,
       ownerId: user.id,
       ownerName: user.registrationNumber,
       ownerRole: user.role,
-  ownerSubject: user.role === 'staff' ? (user.subject || 'General') : undefined,
+      ownerSubject: user.role === 'staff' ? (user.subject || 'General') : undefined,
       isShared: user.role === 'staff' ? !!isShared : false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-  whiteboards.unshift(wb);
-  persist();
-    console.log('Whiteboard saved:', { id: wb.id, by: user.registrationNumber });
+    whiteboards.unshift(wb);
+    persist();
+    console.log('Whiteboard saved (memory):', { id: wb.id, by: user.registrationNumber });
     return res.status(201).json(wb);
   } catch (err) {
     console.error('Whiteboard save error:', err);
@@ -941,18 +1061,27 @@ app.post('/api/whiteboards', (req, res) => {
   }
 });
 
-app.delete('/api/whiteboards/:id', (req, res) => {
+app.delete('/api/whiteboards/:id', async (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    if (mongoReady && WhiteboardModel) {
+      const id = String(req.params.id);
+      const doc = await WhiteboardModel.findById(id);
+      if (!doc) return res.status(404).json({ message: 'Whiteboard not found' });
+      if (doc.ownerName !== user.registrationNumber) return res.status(403).json({ message: 'Forbidden: not owner' });
+      await WhiteboardModel.deleteOne({ _id: id });
+      console.log('Whiteboard deleted (Mongo):', { id });
+      return res.json({ message: 'Whiteboard deleted' });
+    }
     const id = String(req.params.id);
     const idx = whiteboards.findIndex(w => w.id === id);
     if (idx === -1) return res.status(404).json({ message: 'Whiteboard not found' });
     const wb = whiteboards[idx];
     if (wb.ownerId !== user.id) return res.status(403).json({ message: 'Forbidden: not owner' });
-  whiteboards.splice(idx, 1);
-  persist();
-    console.log('Whiteboard deleted:', { id });
+    whiteboards.splice(idx, 1);
+    persist();
+    console.log('Whiteboard deleted (memory):', { id });
     return res.json({ message: 'Whiteboard deleted' });
   } catch (err) {
     console.error('Whiteboard delete error:', err);
@@ -961,13 +1090,18 @@ app.delete('/api/whiteboards/:id', (req, res) => {
 });
 
 // Search shared whiteboards by staff registrationNumber (for students)
-app.get('/api/whiteboards/search/:staffId', (req, res) => {
+app.get('/api/whiteboards/search/:staffId', async (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
     const staffId = req.params.staffId;
     const staff = users.find(u => u.registrationNumber === staffId && u.role === 'staff');
     if (!staff) return res.status(404).json({ message: 'Staff not found' });
+    if (mongoReady && WhiteboardModel) {
+      const shared = await WhiteboardModel.find({ isShared: true, ownerRole: 'staff', ownerName: staff.registrationNumber }).sort({ createdAt: -1 }).lean();
+      const teacherInfo = { registrationNumber: staff.registrationNumber, subject: staff.subject || 'General', drawingsCount: shared.length };
+      return res.json({ drawings: shared.map(d => ({ ...d, id: String(d._id) })), teacherInfo });
+    }
     const shared = whiteboards.filter(w => w.isShared && w.ownerRole === 'staff' && w.ownerName === staff.registrationNumber);
     const teacherInfo = { registrationNumber: staff.registrationNumber, subject: staff.subject || 'General', drawingsCount: shared.length };
     return res.json({ drawings: shared, teacherInfo });
@@ -978,29 +1112,32 @@ app.get('/api/whiteboards/search/:staffId', (req, res) => {
 });
 
 // Save a shared staff whiteboard into the student's own drawings
-app.post('/api/whiteboards/save/:id', (req, res) => {
+app.post('/api/whiteboards/save/:id', async (req, res) => {
   try {
     const user = getUserFromToken(req.headers.authorization);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    if (mongoReady && WhiteboardModel) {
+      const id = String(req.params.id);
+      const src = await WhiteboardModel.findById(id).lean();
+      if (!src) return res.status(404).json({ message: 'Whiteboard not found' });
+      if (!(src.isShared && src.ownerRole === 'staff')) return res.status(400).json({ message: 'Whiteboard is not a shared staff drawing' });
+      const copyDoc = await WhiteboardModel.create({
+        title: src.title,
+        imageData: src.imageData,
+        ownerName: user.registrationNumber,
+        ownerRole: user.role,
+        isShared: false
+      });
+      const data = copyDoc.toObject();
+      return res.status(201).json({ ...data, id: String(data._id) });
+    }
     const id = String(req.params.id);
     const source = whiteboards.find(w => w.id === id);
     if (!source) return res.status(404).json({ message: 'Whiteboard not found' });
-    if (!(source.isShared && source.ownerRole === 'staff')) {
-      return res.status(400).json({ message: 'Whiteboard is not a shared staff drawing' });
-    }
-    const copy = {
-      ...source,
-      id: String(whiteboardIdCounter++),
-      ownerId: user.id,
-      ownerName: user.registrationNumber,
-      ownerRole: user.role,
-      ownerSubject: undefined,
-      isShared: false,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-  whiteboards.unshift(copy);
-  persist();
+    if (!(source.isShared && source.ownerRole === 'staff')) return res.status(400).json({ message: 'Whiteboard is not a shared staff drawing' });
+    const copy = { ...source, id: String(whiteboardIdCounter++), ownerId: user.id, ownerName: user.registrationNumber, ownerRole: user.role, ownerSubject: undefined, isShared: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    whiteboards.unshift(copy);
+    persist();
     return res.status(201).json(copy);
   } catch (err) {
     console.error('Save shared whiteboard error:', err);
